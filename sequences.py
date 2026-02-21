@@ -14,7 +14,7 @@ _SINGLE_QUBIT_GATE_MAP = {
 }
 
 
-def get_single_qubit_ops(seq: list[str]):
+def get_single_qubit_ops(seq: list[str]) -> list:
     ops = []
 
     for name in seq:

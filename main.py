@@ -6,7 +6,7 @@ from qiskit.dagcircuit import DAGCircuit, DAGDependency
 from qiskit.visualization import dag_drawer
 import random
 from sequences import inverse_pairs, composite_gate_sequences, cloaked_gates_sequences, get_single_qubit_ops, delayed_gates_sequences
-from typing import Optional, Iterable, List, TypedDict, NotRequired, Dict
+from typing import Optional, Iterable, List, TypedDict, NotRequired, Dict, Literal
 
 
 def get_circuit() -> QuantumCircuit:
@@ -54,7 +54,7 @@ def qubit_index(qubit) -> int:
 
 def find_kth_gate_on_qubit(qc: QuantumCircuit, gate_name: str, qubit: int, k: int) -> int:
     """
-    Returns the global index i into qc.data for the k-th occurrence of `gate_name`
+    Returns the position in qc.data for the k-th occurrence of `gate_name`
     acting on qubit `q`. Raises if not found.
     """
     if k <= 0:
@@ -75,6 +75,58 @@ def find_kth_gate_on_qubit(qc: QuantumCircuit, gate_name: str, qubit: int, k: in
     raise ValueError(f"Did not find {k}-th '{gate_name}' on qubit {qubit}")
 
 
+def count_ops_on_qubit_before_index(qc: QuantumCircuit, qubit: int, end_idx: int) -> int:
+    count = 0
+    for ci in qc.data[:end_idx]:
+        if any(qubit_index(qb) == qubit for qb in ci.qubits):
+            count += 1
+    return count
+
+
+def resolve_insert_position_for_qubit(
+    qc: QuantumCircuit,
+    qubit: int,
+    insert_idx_on_qubit: Optional[int],
+) -> int:
+    if insert_idx_on_qubit is None:
+        try:
+            return find_kth_gate_on_qubit(qc, "measure", qubit, 1)
+        except ValueError:
+            return len(qc.data)
+
+    if insert_idx_on_qubit < 0:
+        raise IndexError(
+            f"insert_idx (on qubit) must be >= 0 or None, got {insert_idx_on_qubit}"
+        )
+
+    count = 0
+    for i, ci in enumerate(qc.data):
+        if any(qubit_index(qb) == qubit for qb in ci.qubits):
+            if count == insert_idx_on_qubit:
+                return i
+            count += 1
+
+    try:
+        return find_kth_gate_on_qubit(qc, "measure", qubit, 1)
+    except ValueError:
+        return len(qc.data)
+
+
+def insert_single_qubit_ops_at_position(
+    qc: QuantumCircuit,
+    insert_idx: int,
+    qubit: int,
+    ops: Iterable[Instruction],
+) -> None:
+    if insert_idx < 0 or insert_idx > len(qc.data):
+        raise IndexError(f"insert_idx must be in [0, {len(qc.data)}], got {insert_idx}")
+
+    q = qc.qubits[qubit]
+    for offset, op in enumerate(list(ops)):
+        ci = CircuitInstruction(op, qubits=(q,), clbits=())
+        qc.data.insert(insert_idx + offset, ci)
+
+
 def insert_single_qubit_ops_at(
     qc: QuantumCircuit,
     insert_idx: Optional[int],
@@ -87,26 +139,15 @@ def insert_single_qubit_ops_at(
     if qubit < 0 or qubit >= qc.num_qubits:
         raise IndexError(f"qubit must be in [0, {qc.num_qubits-1}], got {qubit}")
 
-    # Normalize None to "append before the first measurement"
-    if insert_idx is None:
-        try:
-            insert_idx = find_kth_gate_on_qubit(qc, "measure", qubit, 1)
-        except ValueError:
-            insert_idx = len(qc.data) # simply append if there is no measurement
-
-    if insert_idx < 0 or insert_idx > len(qc.data):
-        raise IndexError(f"insert_idx must be in [0, {len(qc.data)}] or None, got {insert_idx}")
+    insert_pos = resolve_insert_position_for_qubit(qc, qubit, insert_idx)
 
     for op in ops_list:
         if getattr(op, "num_qubits", None) != 1:
             raise ValueError(f"Only single-qubit ops allowed, got {op.name} with num_qubits={op.num_qubits}")
 
-    # Insert ops
-    q = qc.qubits[qubit]
-    
-    for offset, op in enumerate(ops_list):
-        ci = CircuitInstruction(op, qubits=(q,), clbits=())
-        qc.data.insert(insert_idx + offset, ci)
+    insert_single_qubit_ops_at_position(
+        qc, insert_idx=insert_pos, qubit=qubit, ops=ops_list
+    )
 
 
 def pop_single_qubit_op_at(
@@ -151,16 +192,23 @@ def replace_single_qubit_ops_at(
         qc, idx, require_gate_name=require_gate_name
     )
 
-    # convert qubit object -> index for your insert function
+    # convert qubit object -> index
     q_idx = getattr(target_qubit_obj, "index", getattr(target_qubit_obj, "_index"))
 
-    insert_single_qubit_ops_at(qc, insert_idx=idx, qubit=q_idx, ops=ops)
+    ops_list: List[Instruction] = list(ops)
+    for op in ops_list:
+        if getattr(op, "num_qubits", None) != 1:
+            raise ValueError(f"Only single-qubit ops allowed, got {op.name} with num_qubits={op.num_qubits}")
+
+    insert_single_qubit_ops_at_position(qc, insert_idx=idx, qubit=q_idx, ops=ops_list)
 
 
 class LocationParams(TypedDict):
-    gate_name: str
     qubit: int # make qubit List[int] for multi-qubit gates
+    index: NotRequired[int]
+    gate_name: NotRequired[str]
     occurrence: NotRequired[int]
+    mode: NotRequired[Literal["index", "occurrence"]]
 
 class CompositeGatesStruct(TypedDict):
     aux: Gate
@@ -170,10 +218,72 @@ class CompositeGatesStruct(TypedDict):
 SequenceBook = Dict[str, List[List[str]]]
 
 
-def sequenceReplaceGates(qc: QuantumCircuit, location_params: LocationParams, sequence_book: SequenceBook, variant: Optional[int] = None) -> QuantumCircuit:
-    gate_name = location_params["gate_name"]
+def resolve_location_index(
+    qc: QuantumCircuit,
+    location_params: LocationParams,
+) -> int:
+    mode = location_params.get("mode", "index")
+
+    if mode == "index":
+        if "index" not in location_params:
+            raise ValueError("index must be provided when mode='index'")
+        idx = location_params["index"]
+        if idx < 0:
+            raise IndexError(f"index must be >= 0, got {idx}")
+        return idx
+
+    if mode == "occurrence":
+        gate_name = location_params.get("gate_name")
+        if gate_name is None:
+            raise ValueError("gate_name must be provided when mode='occurrence'")
+        qubit = location_params["qubit"]
+        occurrence = location_params.get("occurrence", 1)
+        return find_kth_gate_on_qubit(qc, gate_name, qubit, occurrence)
+
+    raise ValueError(f"Unknown location mode: {mode}")
+
+
+def resolve_insertion_index_on_qubit(
+    qc: QuantumCircuit,
+    location_params: LocationParams,
+) -> Optional[int]:
+    mode = location_params.get("mode", "index")
     qubit = location_params["qubit"]
-    occurrence = location_params.get("occurrence", 1)
+
+    if mode == "index":
+        if "index" not in location_params:
+            raise ValueError("index must be provided when mode='index'")
+        idx = location_params["index"]
+        if idx < 0:
+            raise IndexError(f"index must be >= 0, got {idx}")
+        return idx
+
+    if mode == "occurrence":
+        gate_name = location_params.get("gate_name")
+        if gate_name is None:
+            raise ValueError("gate_name must be provided when mode='occurrence'")
+        occurrence = location_params.get("occurrence", 1)
+        gate_pos = find_kth_gate_on_qubit(qc, gate_name, qubit, occurrence)
+        return gate_pos
+
+    raise ValueError(f"Unknown location mode: {mode}")
+
+
+def sequenceReplaceGates(qc: QuantumCircuit, location_params: LocationParams, sequence_book: SequenceBook, variant: Optional[int] = None) -> QuantumCircuit:
+    idx = resolve_location_index(qc, location_params)
+    if idx >= len(qc.data):
+        raise Exception(
+            f"Invalid replacement index: {idx}. Must be < len(qc.data)={len(qc.data)}"
+        )
+
+    gate_name = location_params.get("gate_name", qc.data[idx].operation.name)
+    actual_gate_name = qc.data[idx].operation.name
+
+    if gate_name != actual_gate_name:
+        raise ValueError(
+            f"Location points to gate '{actual_gate_name}' at idx={idx}, "
+            f"but gate_name='{gate_name}' was requested"
+        )
 
     if gate_name not in sequence_book:
         raise ValueError(f"No sequences defined for gate: {gate_name}")
@@ -189,8 +299,6 @@ def sequenceReplaceGates(qc: QuantumCircuit, location_params: LocationParams, se
     if not isinstance(variant, int) or variant < 0 or variant >= len(recipes):
         raise IndexError(f"variant must be in [0, {len(recipes)-1}], got {variant}")
 
-    idx = find_kth_gate_on_qubit(qc, gate_name, qubit, occurrence)
-
     seq_names = recipes[variant]
     gate_classes = get_single_qubit_ops(seq_names)     # returns constructors/classes
     ops = [cls() for cls in gate_classes]              # instantiate here
@@ -202,11 +310,9 @@ def sequenceReplaceGates(qc: QuantumCircuit, location_params: LocationParams, se
     return qc1
 
 
-def inverseGates(qc: QuantumCircuit, location_params: LocationParams, ops: List[str]): 
-    gate_name = location_params['gate_name']
+def inverseGates(qc: QuantumCircuit, location_params: LocationParams, ops: List[str]):
     qubit = location_params['qubit']
-    occurrence = location_params.get('occurrence', 1)
-    idx = find_kth_gate_on_qubit(qc, gate_name, qubit, occurrence)
+    idx = resolve_insertion_index_on_qubit(qc, location_params)
     
     operators = []
     
@@ -227,10 +333,8 @@ def inverseGates(qc: QuantumCircuit, location_params: LocationParams, ops: List[
 
 
 def compositeGates(qc: QuantumCircuit, location_params: LocationParams, ops: CompositeGatesStruct): 
-    gate_name = location_params['gate_name']
     qubit = location_params['qubit']
-    occurrence = location_params.get('occurrence', 1)
-    idx = find_kth_gate_on_qubit(qc, gate_name, qubit, occurrence)
+    idx = resolve_insertion_index_on_qubit(qc, location_params)
     
     operators = [ops["aux"], ops["res"]]
     
@@ -252,14 +356,14 @@ def delayedGates(qc: QuantumCircuit, location_params: LocationParams, variant: O
 qc = get_circuit()
 draw_qc(qc, block=False)
 
-qc1 = inverseGates(qc, {"gate_name": "cz", "qubit": 1, "occurrence": 1}, ["h", "t", "s"])
+qc1 = inverseGates(qc, {"qubit": 1, "gate_name": "x", "mode": "occurrence", "occurrence": 1}, ["h", "t", "s"])
 draw_qc(qc1, block=False, title="Inverse Gates")
 
-qc2 = compositeGates(qc, {"gate_name": "cz", "qubit": 1, "occurrence": 1}, composite_gate_sequences) # type: ignore
+qc2 = compositeGates(qc, {"qubit": 1, "index": 5}, composite_gate_sequences) # type: ignore
 draw_qc(qc2, block=False, title="Composite Gates")
 
-qc3 = cloakedGates(qc, {"gate_name": "y", "qubit": 2, "occurrence": 1})
+qc3 = cloakedGates(qc, {"qubit": 2, "index": 2})
 draw_qc(qc3, block=False, title="Cloaked Gates")
 
-qc4 = delayedGates(qc, {"gate_name": "h", "qubit": 3, "occurrence": 1})
+qc4 = delayedGates(qc, {"qubit": 3, "mode": "occurrence", "gate_name": "h", "occurrence": 1})
 draw_qc(qc4, title="Delayed Gates")
