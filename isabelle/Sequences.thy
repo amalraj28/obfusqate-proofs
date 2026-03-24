@@ -8,8 +8,10 @@ begin
 abbreviation Sdg :: "complex mat" where
   "Sdg \<equiv> dagger S"
 
+
 abbreviation Tdg :: "complex mat" where
   "Tdg \<equiv> dagger T"
+
 
 definition cloak_seq :: "complex mat \<Rightarrow> complex mat list list" where
   "cloak_seq g = 
@@ -84,6 +86,7 @@ definition delayed_seq :: "complex mat \<Rightarrow> complex mat list list" wher
        ] else
      [])"
 
+
 definition inverses :: "complex mat list list" where
   "inverses = [
     [X, X],
@@ -101,44 +104,58 @@ definition inverses :: "complex mat list list" where
 lemma dim_row_X[simp]: "dim_row X = 2"
   by (simp add: X_def)
 
+
 lemma dim_col_X[simp]: "dim_col X = 2"
   by (simp add: X_def)
+
 
 lemma dim_row_Y[simp]: "dim_row Y = 2"
   by (simp add: Y_def)
 
+
 lemma dim_col_Y[simp]: "dim_col Y = 2"
   by (simp add: Y_def)
+
 
 lemma dim_row_Z[simp]: "dim_row Z = 2"
   by (simp add: Z_def)
 
+
 lemma dim_col_Z[simp]: "dim_col Z = 2"
   by (simp add: Z_def)
+
 
 lemma dim_row_H[simp]: "dim_row H = 2"
   by (simp add: H_def)
 
+
 lemma dim_col_H[simp]: "dim_col H = 2"
   by (simp add: H_def)
+
 
 lemma dim_row_S[simp]: "dim_row S = 2"
   by (simp add: S_def)
 
+
 lemma dim_col_S[simp]: "dim_col S = 2"
   by (simp add: S_def)
+
 
 lemma dim_row_T[simp]: "dim_row T = 2"
   by (simp add: T_def)
 
+
 lemma dim_col_T[simp]: "dim_col T = 2"
   by (simp add: T_def)
+
 
 lemma dim_row_CNOT[simp]: "dim_row CNOT = 4"
   by (simp add: CNOT_def)
 
+
 lemma dim_col_CNOT[simp]: "dim_col CNOT = 4"
   by (simp add: CNOT_def)
+
 
 lemma Tdg_is_inv_T:
   "T * Tdg = 1\<^sub>m 2"
@@ -147,12 +164,14 @@ lemma Tdg_is_inv_T:
     apply(auto simp: scalar_prod_def complex_mult_cnj Re_exp Im_exp of_real_def)  
   done
 
+
 lemma T_is_inv_Tdg:
   "Tdg * T = 1\<^sub>m 2"
  apply(simp add: T_def times_mat_def one_mat_def complex_mult_cnj)
   apply(rule cong_mat)
     apply(auto simp add: mult.commute scalar_prod_def Re_exp Im_exp complex_mult_cnj of_real_def)  
   done
+
 
 lemma Sdg_is_inv_S:
   "S * Sdg = 1\<^sub>m 2"
@@ -161,12 +180,14 @@ lemma Sdg_is_inv_S:
     apply(auto simp: scalar_prod_def complex_mult_cnj Re_exp Im_exp of_real_def)  
   done
 
+
 lemma S_is_inv_Sdg:
   "Sdg * S = 1\<^sub>m 2"
  apply(simp add: S_def times_mat_def one_mat_def complex_mult_cnj)
   apply(rule cong_mat)
     apply(auto simp add: mult.commute scalar_prod_def Re_exp Im_exp complex_mult_cnj of_real_def)  
   done
+
 
 lemma inverse_pair_identity:
   assumes "seq \<in> set inverses"
@@ -535,11 +556,12 @@ lemma SZSdg_is_Z[simp]:
   apply simp_all
   by (simp add: scalar_prod_def scaleR_conv_of_real)
 
+
 lemma XZHXZ_is_H[simp]:
   "compose [X, Z, H, X, Z] 2 = H"
   apply (auto simp add: X_def H_def Z_def times_mat_def)
   by (auto simp add: scalar_prod_def)
-   
+
 
 lemma ZXHZX_is_H[simp]:
   "compose [Z, X, H, Z, X] 2 = H"
@@ -900,8 +922,8 @@ lemma delayed_seq_H_correct[simp]:
   shows "compose seq 2 = H"
   using assms
   unfolding delayed_seq_def
-  apply (simp add: not_sym del: compose.simps)
-  sorry
+  apply simp_all
+  using XZHXZ_is_H ZXHZX_is_H by blast
 
 
 lemma delayed_seq_Z_correct[simp]:
@@ -986,14 +1008,13 @@ qed
 
 lemma delayed_seq_correct_idx:
   assumes "n < length (delayed_seq g)"
-  shows "compose ((dealyed_seq g) ! n) (dim_row g) = g"
+  shows "compose ((delayed_seq g) ! n) (dim_row g) = g"
 
 proof -
   have "(delayed_seq g) ! n \<in> set (delayed_seq g)"
     using assms by auto
   then show ?thesis
-    using delayed_seq_correct 
-    sorry
+    using delayed_seq_correct by simp
 qed
 
 end

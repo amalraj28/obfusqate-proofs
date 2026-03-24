@@ -2,6 +2,8 @@ theory Circuit
   imports Sequences
 begin
 
+context gate
+begin
 type_synonym circuit = "complex mat list"
 
 definition insert_seq :: "circuit \<Rightarrow> nat \<Rightarrow> complex mat list \<Rightarrow> circuit" where
@@ -214,7 +216,8 @@ lemma inverse_insertion_preserves:
 proof -
   have "compose seq d = 1\<^sub>m d"
     using assms(1) inverse_pair_identity
-    sorry
+    by (metis carrier_matD(1) compose.simps(1) length_greater_0_conv nth_mem
+        seq_carrier)
   then show ?thesis
     using identity_insertion qc_carrier seq_carrier
     by blast
@@ -230,7 +233,7 @@ lemma cloak_replacement_preserves:
 proof -
   have "compose seq d = g"
     using cloak_seq_correct seq_mem
-    sorry
+    by (metis carrier_matD(1) gate nth_mem pos_lt qc_carrier)
   also have "... = qc ! pos"
     using gate by simp
   finally have "compose seq d = qc ! pos" .
@@ -249,7 +252,7 @@ lemma delayed_replacement_preserves:
 proof -
   have "compose seq d = g"
     using delayed_seq_correct seq_mem
-    by simp
+    by (metis carrier_matD(1) gate nth_mem pos_lt qc_carrier)
   also have "... = qc ! pos"
     using gate by simp
   finally have "compose seq d = qc ! pos" .
@@ -257,3 +260,6 @@ proof -
     using replacement_preservation pos_lt qc_carrier seq_carrier
     by blast
 qed
+
+end
+end
