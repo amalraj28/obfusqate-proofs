@@ -39,6 +39,7 @@ next
     by (simp)
 qed
 
+
 lemma identity_insertion:
   assumes seq_id: "compose seq d = 1\<^sub>m d"
   assumes qc_carrier: "\<forall>g \<in> set qc. g \<in> carrier_mat d d"
@@ -206,59 +207,6 @@ proof -
   also have "... = compose qc d"
     using decomp_qc by simp
   finally show ?thesis .
-qed
-
-lemma inverse_insertion_preserves:
-  assumes "seq \<in> set inverses"
-  assumes qc_carrier: "\<forall>g \<in> set qc. g \<in> carrier_mat d d"
-  assumes seq_carrier: "\<forall>g \<in> set seq. g \<in> carrier_mat d d"
-  shows "compose (insert_seq qc pos seq) d = compose qc d"
-proof -
-  have "compose seq d = 1\<^sub>m d"
-    using assms(1) inverse_pair_identity
-    by (metis carrier_matD(1) compose.simps(1) length_greater_0_conv nth_mem
-        seq_carrier)
-  then show ?thesis
-    using identity_insertion qc_carrier seq_carrier
-    by blast
-qed
-
-lemma cloak_replacement_preserves:
-  assumes pos_lt: "pos < length qc"
-  assumes gate: "qc ! pos = g"
-  assumes seq_mem: "seq \<in> set (cloak_seq g)"
-  assumes qc_carrier: "\<forall>g \<in> set qc. g \<in> carrier_mat d d"
-  assumes seq_carrier: "\<forall>g \<in> set seq. g \<in> carrier_mat d d"
-  shows "compose (replace_gate qc pos seq) d = compose qc d"
-proof -
-  have "compose seq d = g"
-    using cloak_seq_correct seq_mem
-    by (metis carrier_matD(1) gate nth_mem pos_lt qc_carrier)
-  also have "... = qc ! pos"
-    using gate by simp
-  finally have "compose seq d = qc ! pos" .
-  then show ?thesis
-    using replacement_preservation pos_lt qc_carrier seq_carrier
-    by blast
-qed
-
-lemma delayed_replacement_preserves:
-  assumes pos_lt: "pos < length qc"
-  assumes gate: "qc ! pos = g"
-  assumes seq_mem: "seq \<in> set (delayed_seq g)"
-  assumes qc_carrier: "\<forall>g \<in> set qc. g \<in> carrier_mat d d"
-  assumes seq_carrier: "\<forall>g \<in> set seq. g \<in> carrier_mat d d"
-  shows "compose (replace_gate qc pos seq) d = compose qc d"
-proof -
-  have "compose seq d = g"
-    using delayed_seq_correct seq_mem
-    by (metis carrier_matD(1) gate nth_mem pos_lt qc_carrier)
-  also have "... = qc ! pos"
-    using gate by simp
-  finally have "compose seq d = qc ! pos" .
-  then show ?thesis
-    using replacement_preservation pos_lt qc_carrier seq_carrier
-    by blast
 qed
 
 end

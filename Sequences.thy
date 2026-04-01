@@ -100,6 +100,11 @@ definition inverses :: "complex mat list list" where
     [CNOT, CNOT]
   ]"
 
+lemma inverse_pair_length[simp]:
+  shows "\<forall>xs \<in> set inverses. length xs = 2"
+  unfolding inverses_def
+  by (cases n; simp_all)
+
 
 lemma dim_row_X[simp]: "dim_row X = 2"
   by (simp add: X_def)
@@ -220,6 +225,7 @@ proof -
   then show ?thesis
     using inverse_pair_identity by simp
 qed
+
 
 (* ---------- Inverse Pairs are totally proved to be correct above ---------- *)
 (* ---- Cloaked Gates below ----------- *)
