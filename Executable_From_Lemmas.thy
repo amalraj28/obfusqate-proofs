@@ -19,8 +19,8 @@ definition inverse_obfuscate ::
   "circuit \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> circuit" where
   "inverse_obfuscate =
      (\<lambda>qc pos n.
-        if pos \<le> length qc \<and> n < length [[X,X],[Y,Y]]
-        then insert_seq qc pos ([[X,X],[Y,Y]] ! n)
+        if pos \<le> length qc \<and> n < length inverses
+        then insert_seq qc pos (inverses ! n)
         else qc)"
 
 definition cloak_obfuscate ::
