@@ -15,4 +15,4 @@ lemma compose_carrier:
   apply (induct gs)
   by simp_all
   
-end                  
+end

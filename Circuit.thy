@@ -12,6 +12,7 @@ definition insert_seq :: "circuit \<Rightarrow> nat \<Rightarrow> complex mat li
 definition replace_gate :: "circuit \<Rightarrow> nat \<Rightarrow> complex mat list \<Rightarrow> circuit" where
   "replace_gate qc pos seq = take pos qc @ seq @ drop (Suc pos) qc"
 
+
 lemma compose_append:
   assumes "\<forall>g \<in> set (xs @ ys). g \<in> carrier_mat d d"
   shows "compose (xs @ ys) d = compose ys d * compose xs d"
