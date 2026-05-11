@@ -45,7 +45,7 @@ definition cloak_seq :: "complex mat \<Rightarrow> complex mat list list" where
       [T, T], [Z, T, Z, T], [Tdg, Tdg, Z]
      ] else 
      
-     [])"
+     [[g]])"
 
 (* A table of delayed gate sequences *)
 definition delayed_seq :: "complex mat \<Rightarrow> complex mat list list" where
@@ -84,7 +84,7 @@ definition delayed_seq :: "complex mat \<Rightarrow> complex mat list list" wher
          [Z, Sdg, T, S, Z],
          [Z, S, T, Sdg, Z]
        ] else
-     [])"
+     [[g]])"
 
 
 definition inverses :: "complex mat list list" where
@@ -856,41 +856,46 @@ lemma cloak_seq_S_correct[simp]:
   apply (simp add: not_sym)
   by (auto simp del: compose.simps)
 
+lemma compose_singleton[simp]:
+  "compose [g] (dim_row g) = g"
+  by simp
 
 lemma cloak_seq_correct:
   assumes "seq \<in> set (cloak_seq g)"
   shows "compose seq (dim_row g) = g"
-proof -
-  have "g = X \<or> g = Y \<or> g = Z \<or> g = S"
-    using assms
-    unfolding cloak_seq_def
-    by auto
+proof (cases "g = X \<or> g = Y \<or> g = Z \<or> g = S")
+  case True
   then show ?thesis
   proof
     assume "g = X"
-    with assms show ?thesis
-      by simp
+    with assms show ?thesis by simp
   next
-    assume "g = Y \<or> g = Z \<or> g = S"
+    assume rest: "g = Y \<or> g = Z \<or> g = S"
     then show ?thesis
     proof
       assume "g = Y"
-      with assms show ?thesis
-        by simp
+      with assms show ?thesis by simp
     next
-      assume "g = Z \<or> g = S"
+      assume rest2: "g = Z \<or> g = S"
       then show ?thesis
       proof
         assume "g = Z"
-        with assms show ?thesis
-          by simp
+        with assms show ?thesis by simp
       next
         assume "g = S"
-        with assms show ?thesis
-          by simp
+        with assms show ?thesis by simp
       qed
     qed
   qed
+next
+  case False
+  then have "cloak_seq g = [[g]]"
+    unfolding cloak_seq_def
+    by simp
+  with assms have "seq = [g]"
+    by simp
+  then show ?thesis
+    by simp
 qed
   
 
@@ -962,55 +967,54 @@ lemma delayed_seq_T_correct[simp]:
 lemma delayed_seq_correct:
   assumes "seq \<in> set (delayed_seq g)"
   shows "compose seq (dim_row g) = g"
-proof -
-  have "g = X \<or> g = Y \<or> g = Z \<or> g = S \<or> g = H \<or> g = T"
-    using assms
-    unfolding delayed_seq_def
-    by auto
+proof (cases "g = X \<or> g = Y \<or> g = Z \<or> g = S \<or> g = H \<or> g = T")
+  case True
   then show ?thesis
   proof
     assume "g = X"
-    with assms show ?thesis
-      by simp
+    with assms show ?thesis by simp
   next
-    assume "g = Y \<or> g = Z \<or> g = S \<or> g = H \<or> g = T"
+    assume rest: "g = Y \<or> g = Z \<or> g = S \<or> g = H \<or> g = T"
     then show ?thesis
     proof
       assume "g = Y"
-      with assms show ?thesis
-        by simp
+      with assms show ?thesis by simp
     next
-      assume "g = Z \<or> g = S \<or> g = H \<or> g = T"
+      assume rest2: "g = Z \<or> g = S \<or> g = H \<or> g = T"
       then show ?thesis
       proof
         assume "g = Z"
-        with assms show ?thesis
-          by simp
+        with assms show ?thesis by simp
       next
         assume "g = S \<or> g = H \<or> g = T"
         then show ?thesis
-      proof
-        assume "g = S"
-        with assms show ?thesis
-          by simp
-      next
-        assume "g = H \<or> g = T"
+        proof
+          assume "g = S"
+          with assms show ?thesis by simp
+        next
+          assume "g = H \<or> g = T"
         then show ?thesis
-      proof
-        assume "g = H"
-        with assms show ?thesis
-          by simp
-      next
-        assume "g = T"
-        with assms show ?thesis
-          by simp
+        proof
+          assume "g = H"
+          with assms show ?thesis by simp
+        next
+          assume "g = T"
+          with assms show ?thesis by simp
+        qed
       qed
     qed
   qed
 qed
+next
+  case False
+  then have "delayed_seq g = [[g]]"
+    unfolding delayed_seq_def
+    by simp
+  with assms have "seq = [g]"
+    by simp
+  then show ?thesis
+    by simp
 qed
-qed
-  
 
 lemma delayed_seq_correct_idx:
   assumes "n < length (delayed_seq g)"
