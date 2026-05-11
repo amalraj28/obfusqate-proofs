@@ -14,5 +14,5 @@ lemma compose_carrier:
   using assms
   apply (induct gs)
   by simp_all
-  
+
 end
