@@ -1,2 +1,6 @@
 *.thy~
 AFP/
+/.isabelle/
+/.isabelle-local/
+/tools/AutoCorrode/
+useless/
