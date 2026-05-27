@@ -4,3 +4,4 @@ AFP/
 /.isabelle-local/
 /tools/AutoCorrode/
 useless/
+*.ml
