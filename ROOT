@@ -11,4 +11,4 @@ session Verification_Framework = HOL +
     InverseGates
     CloakedGates
     DelayedGates
-    Executable
+    QuantumCircuitSemantics

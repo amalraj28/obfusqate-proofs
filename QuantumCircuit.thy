@@ -1599,7 +1599,90 @@ lemma valid_insert_choice_direct:
       valid_insert_mats)
 
 
+section \<open>Basis Transformation Blocks\<close>
+
+definition global_basis_matrix ::
+  "complex mat \<Rightarrow> complex mat \<Rightarrow> complex mat \<Rightarrow> complex mat"
+where
+  "global_basis_matrix B Binv G = B * G * Binv"
+
+definition selective_basis_matrix ::
+  "complex mat \<Rightarrow> complex mat \<Rightarrow> complex mat \<Rightarrow> complex mat"
+where
+  "selective_basis_matrix B Binv G = Binv * G * B"
+
+definition global_basis_sequence ::
+  "complex mat \<Rightarrow> complex mat \<Rightarrow> complex mat \<Rightarrow> complex mat list"
+where
+  "global_basis_sequence B Binv G =
+     [B, global_basis_matrix B Binv G, Binv]"
+
+definition selective_basis_sequence ::
+  "complex mat \<Rightarrow> complex mat \<Rightarrow> complex mat \<Rightarrow> complex mat list"
+where
+  "selective_basis_sequence B Binv G =
+     [Binv, selective_basis_matrix B Binv G, B]"
+
+definition apply_global_basis ::
+  "quantum_circuit \<Rightarrow> nat \<Rightarrow> complex mat \<Rightarrow> complex mat \<Rightarrow> quantum_circuit"
+where
+  "apply_global_basis qc pos B Binv =
+     replace_with_mats qc pos
+       (global_basis_sequence B Binv
+          (gate_matrix ((instructions qc) ! pos)))"
+
+definition apply_selective_basis ::
+  "quantum_circuit \<Rightarrow> nat \<Rightarrow> complex mat \<Rightarrow> complex mat \<Rightarrow> quantum_circuit"
+where
+  "apply_selective_basis qc pos B Binv =
+     replace_with_mats qc pos
+       (selective_basis_sequence B Binv
+          (gate_matrix ((instructions qc) ! pos)))"
+
+definition is_valid_global_basis ::
+  "quantum_circuit \<Rightarrow> nat \<Rightarrow> complex mat \<Rightarrow> complex mat \<Rightarrow> bool"
+where
+  "is_valid_global_basis qc pos B Binv \<longleftrightarrow>
+     can_replace_at qc pos"
+
+definition is_valid_selective_basis ::
+  "quantum_circuit \<Rightarrow> nat \<Rightarrow> complex mat \<Rightarrow> complex mat \<Rightarrow> bool"
+where
+  "is_valid_selective_basis qc pos B Binv \<longleftrightarrow>
+     can_replace_at qc pos"
+
+lemma valid_apply_global_basis:
+  assumes "is_valid_circuit qc"
+  assumes "is_valid_global_basis qc pos B Binv"
+  shows "is_valid_circuit (apply_global_basis qc pos B Binv)"
+  using assms
+  by (simp add:
+      apply_global_basis_def
+      is_valid_global_basis_def
+      can_replace_at_def
+      valid_replace_with_mats)
+
+lemma valid_apply_selective_basis:
+  assumes "is_valid_circuit qc"
+  assumes "is_valid_selective_basis qc pos B Binv"
+  shows "is_valid_circuit (apply_selective_basis qc pos B Binv)"
+  using assms
+  by (simp add:
+      apply_selective_basis_def
+      is_valid_selective_basis_def
+      can_replace_at_def
+      valid_replace_with_mats)
+
+
+
 section \<open>Obfuscation Step Syntax\<close>
+
+datatype obfuscation_step =
+    Cloak nat nat
+  | Delay nat nat
+  | InsertInverse nat nat "nat list"
+  | GlobalBasis nat "complex mat" "complex mat"
+  | SelectiveBasis nat "complex mat" "complex mat"
 
 (*
   """
@@ -1621,11 +1704,6 @@ section \<open>Obfuscation Step Syntax\<close>
         parameters.
   """
 *)
-
-datatype obfuscation_step =
-    Cloak nat nat
-  | Delay nat nat
-  | InsertInverse nat nat "nat list"
 
 
 (*
@@ -2447,6 +2525,10 @@ where
      delay qc pos choice"
 | "apply_step qc (InsertInverse pos choice params) =
      insert_inverse_pair qc pos choice params"
+| "apply_step qc (GlobalBasis pos B Binv) =
+     apply_global_basis qc pos B Binv"
+| "apply_step qc (SelectiveBasis pos B Binv) =
+     apply_selective_basis qc pos B Binv"
 
 
 (*
@@ -2474,6 +2556,10 @@ where
      is_valid_delay qc pos choice"
 | "is_valid_step qc (InsertInverse pos choice params) =
      is_valid_inverse_insert qc pos choice params"
+| "is_valid_step qc (GlobalBasis pos B Binv) =
+     is_valid_global_basis qc pos B Binv"
+| "is_valid_step qc (SelectiveBasis pos B Binv) =
+     is_valid_selective_basis qc pos B Binv"
 
 
 (*
@@ -2561,7 +2647,9 @@ lemma valid_apply_step:
      (simp_all add:
         valid_cloak
         valid_delay
-        valid_insert_inverse_pair)
+        valid_insert_inverse_pair
+        valid_apply_global_basis
+        valid_apply_selective_basis)
 
 
 (*

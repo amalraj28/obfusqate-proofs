@@ -1239,6 +1239,179 @@ lemma preserve_insert_inverse:
       preserve_insert_choice)
 
 
+section \<open>Preservation for Basis Transformation\<close>
+
+lemma global_basis_sequence_correct:
+  assumes B_carrier: "B \<in> carrier_mat d d"
+  assumes Binv_carrier: "Binv \<in> carrier_mat d d"
+  assumes G_carrier: "G \<in> carrier_mat d d"
+  assumes left_inv: "Binv * B = 1\<^sub>m d"
+  assumes right_inv: "B * Binv = 1\<^sub>m d"
+  shows "compose (global_basis_sequence B Binv G) d = G"
+proof -
+  have BG_carrier: "B * G \<in> carrier_mat d d"
+    using B_carrier G_carrier by simp
+  have BGBinv_carrier: "B * G * Binv \<in> carrier_mat d d"
+    using BG_carrier Binv_carrier by simp
+  have "compose (global_basis_sequence B Binv G) d =
+        Binv * ((B * G * Binv) * B)"
+    using B_carrier Binv_carrier BGBinv_carrier
+    by (simp add: global_basis_sequence_def global_basis_matrix_def)
+  also have "... = Binv * ((B * G) * (Binv * B))"
+    using B_carrier Binv_carrier G_carrier BG_carrier
+    by (smt (verit) assoc_mult_mat mult_carrier_mat)
+  also have "... = Binv * ((B * G) * 1\<^sub>m d)"
+    using left_inv by simp
+  also have "... = Binv * (B * G)"
+    using BG_carrier by auto
+  also have "... = (Binv * B) * G"
+    using B_carrier Binv_carrier G_carrier
+    by simp
+  also have "... = 1\<^sub>m d * G"
+    using left_inv by simp
+  also have "... = G"
+    using G_carrier by simp
+  finally show ?thesis .
+qed
+
+lemma selective_basis_sequence_correct:
+  assumes B_carrier: "B \<in> carrier_mat d d"
+  assumes Binv_carrier: "Binv \<in> carrier_mat d d"
+  assumes G_carrier: "G \<in> carrier_mat d d"
+  assumes left_inv: "Binv * B = 1\<^sub>m d"
+  assumes right_inv: "B * Binv = 1\<^sub>m d"
+  shows "compose (selective_basis_sequence B Binv G) d = G"
+proof -
+  have BinvG_carrier: "Binv * G \<in> carrier_mat d d"
+    using Binv_carrier G_carrier by simp
+  have BinvGB_carrier: "Binv * G * B \<in> carrier_mat d d"
+    using BinvG_carrier B_carrier by simp
+  have "compose (selective_basis_sequence B Binv G) d =
+        B * ((Binv * G * B) * Binv)"
+    using B_carrier Binv_carrier BinvGB_carrier
+    by (simp add: selective_basis_sequence_def selective_basis_matrix_def)
+  also have "... = B * ((Binv * G) * (B * Binv))"
+    using B_carrier Binv_carrier G_carrier BinvG_carrier
+    by (smt (verit) assoc_mult_mat mult_carrier_mat)
+  also have "... = B * ((Binv * G) * 1\<^sub>m d)"
+    using right_inv by simp
+  also have "... = B * (Binv * G)"
+    using BinvG_carrier by auto
+  also have "... = (B * Binv) * G"
+    using B_carrier Binv_carrier G_carrier
+    by simp
+  also have "... = 1\<^sub>m d * G"
+    using right_inv by simp
+  also have "... = G"
+    using G_carrier by simp
+  finally show ?thesis .
+qed
+
+lemma global_basis_sequence_carrier:
+  assumes "B \<in> carrier_mat d d"
+  assumes "Binv \<in> carrier_mat d d"
+  assumes "G \<in> carrier_mat d d"
+  shows "\<forall>M \<in> set (global_basis_sequence B Binv G). M \<in> carrier_mat d d"
+  using assms
+  by (simp add: global_basis_sequence_def global_basis_matrix_def)
+
+lemma selective_basis_sequence_carrier:
+  assumes "B \<in> carrier_mat d d"
+  assumes "Binv \<in> carrier_mat d d"
+  assumes "G \<in> carrier_mat d d"
+  shows "\<forall>M \<in> set (selective_basis_sequence B Binv G). M \<in> carrier_mat d d"
+  using assms
+  by (simp add: selective_basis_sequence_def selective_basis_matrix_def)
+
+lemma preserve_global_basis:
+  assumes pos_lt: "pos < length (instructions qc)"
+  assumes qc_carrier:
+    "\<forall>instr \<in> set (instructions qc).
+       gate_matrix instr \<in> carrier_mat (2 ^ length (gate_params instr))
+                                     (2 ^ length (gate_params instr))"
+  assumes B_carrier:
+    "B \<in> carrier_mat
+          (2 ^ length (gate_params ((instructions qc) ! pos)))
+          (2 ^ length (gate_params ((instructions qc) ! pos)))"
+  assumes Binv_carrier:
+    "Binv \<in> carrier_mat
+          (2 ^ length (gate_params ((instructions qc) ! pos)))
+          (2 ^ length (gate_params ((instructions qc) ! pos)))"
+  assumes left_inv:
+    "Binv * B =
+     1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos)))"
+  assumes right_inv:
+    "B * Binv =
+     1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos)))"
+  shows "eval_circuit (apply_global_basis qc pos B Binv) = eval_circuit qc"
+proof -
+  let ?instr = "(instructions qc) ! pos"
+  let ?d = "2 ^ length (gate_params ?instr)"
+  have G_carrier: "gate_matrix ?instr \<in> carrier_mat ?d ?d"
+    using pos_lt qc_carrier
+    by simp
+  have seq_carrier:
+    "\<forall>M \<in> set (global_basis_sequence B Binv (gate_matrix ?instr)).
+       M \<in> carrier_mat ?d ?d"
+    using B_carrier Binv_carrier G_carrier
+    by (rule global_basis_sequence_carrier)
+  have local_eq:
+    "compose (global_basis_sequence B Binv (gate_matrix ?instr)) ?d =
+     gate_matrix ?instr"
+    using B_carrier Binv_carrier G_carrier left_inv right_inv
+    by (rule global_basis_sequence_correct)
+  show ?thesis
+    using pos_lt qc_carrier seq_carrier local_eq
+    by (simp add:
+        apply_global_basis_def
+        preserve_replace_mats)
+qed
+
+lemma preserve_selective_basis:
+  assumes pos_lt: "pos < length (instructions qc)"
+  assumes qc_carrier:
+    "\<forall>instr \<in> set (instructions qc).
+       gate_matrix instr \<in> carrier_mat (2 ^ length (gate_params instr))
+                                     (2 ^ length (gate_params instr))"
+  assumes B_carrier:
+    "B \<in> carrier_mat
+          (2 ^ length (gate_params ((instructions qc) ! pos)))
+          (2 ^ length (gate_params ((instructions qc) ! pos)))"
+  assumes Binv_carrier:
+    "Binv \<in> carrier_mat
+          (2 ^ length (gate_params ((instructions qc) ! pos)))
+          (2 ^ length (gate_params ((instructions qc) ! pos)))"
+  assumes left_inv:
+    "Binv * B =
+     1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos)))"
+  assumes right_inv:
+    "B * Binv =
+     1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos)))"
+  shows "eval_circuit (apply_selective_basis qc pos B Binv) = eval_circuit qc"
+proof -
+  let ?instr = "(instructions qc) ! pos"
+  let ?d = "2 ^ length (gate_params ?instr)"
+  have G_carrier: "gate_matrix ?instr \<in> carrier_mat ?d ?d"
+    using pos_lt qc_carrier
+    by simp
+  have seq_carrier:
+    "\<forall>M \<in> set (selective_basis_sequence B Binv (gate_matrix ?instr)).
+       M \<in> carrier_mat ?d ?d"
+    using B_carrier Binv_carrier G_carrier
+    by (rule selective_basis_sequence_carrier)
+  have local_eq:
+    "compose (selective_basis_sequence B Binv (gate_matrix ?instr)) ?d =
+     gate_matrix ?instr"
+    using B_carrier Binv_carrier G_carrier left_inv right_inv
+    by (rule selective_basis_sequence_correct)
+  show ?thesis
+    using pos_lt qc_carrier seq_carrier local_eq
+    by (simp add:
+        apply_selective_basis_def
+        preserve_replace_mats)
+qed
+
+
 section \<open>Preservation from Sequence Correctness\<close>
 
 lemma preserve_cloak_seq:
@@ -1482,6 +1655,34 @@ where
       has_circuit_carrier qc \<and>
       has_sequence_carrier inverses choice params \<and>
       compose (inverses ! choice) (2 ^ length params) = 1\<^sub>m (2 ^ length params))"
+
+| "is_semantic_step qc (GlobalBasis pos B Binv) =
+     (pos < length (instructions qc) \<and>
+      has_circuit_carrier qc \<and>
+      B \<in> carrier_mat
+            (2 ^ length (gate_params ((instructions qc) ! pos)))
+            (2 ^ length (gate_params ((instructions qc) ! pos))) \<and>
+      Binv \<in> carrier_mat
+            (2 ^ length (gate_params ((instructions qc) ! pos)))
+            (2 ^ length (gate_params ((instructions qc) ! pos))) \<and>
+      Binv * B =
+        1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos))) \<and>
+      B * Binv =
+        1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos))))"
+
+| "is_semantic_step qc (SelectiveBasis pos B Binv) =
+     (pos < length (instructions qc) \<and>
+      has_circuit_carrier qc \<and>
+      B \<in> carrier_mat
+            (2 ^ length (gate_params ((instructions qc) ! pos)))
+            (2 ^ length (gate_params ((instructions qc) ! pos))) \<and>
+      Binv \<in> carrier_mat
+            (2 ^ length (gate_params ((instructions qc) ! pos)))
+            (2 ^ length (gate_params ((instructions qc) ! pos))) \<and>
+      Binv * B =
+        1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos))) \<and>
+      B * Binv =
+        1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos))))"
       
 
 
@@ -1634,6 +1835,108 @@ next
 
   show ?thesis
     using InsertInverse preserve
+    by simp
+
+next
+  case (GlobalBasis pos B Binv)
+
+  have pos_lt:
+    "pos < length (instructions qc)"
+    using step_sem GlobalBasis
+    by simp
+
+  have qc_carrier:
+    "\<forall>instr \<in> set (instructions qc).
+       gate_matrix instr \<in> carrier_mat
+         (2 ^ length (gate_params instr))
+         (2 ^ length (gate_params instr))"
+    using step_sem GlobalBasis
+    by (simp add: has_circuit_carrier_def)
+
+  have B_carrier:
+    "B \<in> carrier_mat
+          (2 ^ length (gate_params ((instructions qc) ! pos)))
+          (2 ^ length (gate_params ((instructions qc) ! pos)))"
+    using step_sem GlobalBasis
+    by simp
+
+  have Binv_carrier:
+    "Binv \<in> carrier_mat
+          (2 ^ length (gate_params ((instructions qc) ! pos)))
+          (2 ^ length (gate_params ((instructions qc) ! pos)))"
+    using step_sem GlobalBasis
+    by simp
+
+  have left_inv:
+    "Binv * B =
+     1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos)))"
+    using step_sem GlobalBasis
+    by simp
+
+  have right_inv:
+    "B * Binv =
+     1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos)))"
+    using step_sem GlobalBasis
+    by simp
+
+  have preserve:
+    "eval_circuit (apply_global_basis qc pos B Binv) = eval_circuit qc"
+    using pos_lt qc_carrier B_carrier Binv_carrier left_inv right_inv
+    by (rule preserve_global_basis)
+
+  show ?thesis
+    using GlobalBasis preserve
+    by simp
+
+next
+  case (SelectiveBasis pos B Binv)
+
+  have pos_lt:
+    "pos < length (instructions qc)"
+    using step_sem SelectiveBasis
+    by simp
+
+  have qc_carrier:
+    "\<forall>instr \<in> set (instructions qc).
+       gate_matrix instr \<in> carrier_mat
+         (2 ^ length (gate_params instr))
+         (2 ^ length (gate_params instr))"
+    using step_sem SelectiveBasis
+    by (simp add: has_circuit_carrier_def)
+
+  have B_carrier:
+    "B \<in> carrier_mat
+          (2 ^ length (gate_params ((instructions qc) ! pos)))
+          (2 ^ length (gate_params ((instructions qc) ! pos)))"
+    using step_sem SelectiveBasis
+    by simp
+
+  have Binv_carrier:
+    "Binv \<in> carrier_mat
+          (2 ^ length (gate_params ((instructions qc) ! pos)))
+          (2 ^ length (gate_params ((instructions qc) ! pos)))"
+    using step_sem SelectiveBasis
+    by simp
+
+  have left_inv:
+    "Binv * B =
+     1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos)))"
+    using step_sem SelectiveBasis
+    by simp
+
+  have right_inv:
+    "B * Binv =
+     1\<^sub>m (2 ^ length (gate_params ((instructions qc) ! pos)))"
+    using step_sem SelectiveBasis
+    by simp
+
+  have preserve:
+    "eval_circuit (apply_selective_basis qc pos B Binv) = eval_circuit qc"
+    using pos_lt qc_carrier B_carrier Binv_carrier left_inv right_inv
+    by (rule preserve_selective_basis)
+
+  show ?thesis
+    using SelectiveBasis preserve
     by simp
 
 qed
