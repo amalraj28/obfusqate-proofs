@@ -122,8 +122,6 @@ fun delayed_seq_id :: "gate_id ⇒ gate_id list list" where
 | "delayed_seq_id G = [[G]]"
 
 
-
-
 subsection ‹Denotation into the existing proof layer›
 
 context gate
