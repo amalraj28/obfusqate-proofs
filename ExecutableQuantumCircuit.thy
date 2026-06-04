@@ -758,6 +758,74 @@ where
       else qc)"
 
 
+definition can_replace_by_basis_circuit_id ::
+  "quantum_circuit_id \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool"
+where
+  (*
+    """
+      Checks whether a circuit-level executable basis replacement is safe.
+
+      The check ensures that the selected instruction exists, that the selected
+      symbolic basis-transformation alternative exists for the gate at that
+      instruction, and that the selected symbolic sequence can use the original
+      instruction's qubit parameters.
+
+      args:
+        qc:
+          The executable quantum circuit.
+
+        pos:
+          The instruction position to replace.
+
+        idx:
+          The selected basis-transformation alternative.
+
+      returns:
+        True when the circuit-level basis replacement can be applied safely, and
+        False otherwise.
+    """
+  *)
+  "can_replace_by_basis_circuit_id qc pos idx =
+     (if can_replace_at_id qc pos then
+        let instr = instructions_id qc ! pos in
+        let seqs = basis_transform_seq_id (gate_name_id instr) in
+        if idx < length seqs then
+          gate_seq_fits_params_id (seqs ! idx) (gate_params_id instr)
+        else False
+      else False)"
+
+
+definition replace_by_basis_circuit_id ::
+  "quantum_circuit_id \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> quantum_circuit_id"
+where
+  (*
+    """
+      Applies circuit-level executable basis replacement when the request is
+      valid, and otherwise returns the original circuit unchanged.
+
+      args:
+        qc:
+          The executable quantum circuit.
+
+        pos:
+          The instruction position to replace.
+
+        idx:
+          The selected basis-transformation alternative.
+
+      returns:
+        The basis-transformed circuit when the request is valid, and the
+        original circuit otherwise.
+    """
+  *)
+  "replace_by_basis_circuit_id qc pos idx =
+     (if can_replace_by_basis_circuit_id qc pos idx then
+        let instr = instructions_id qc ! pos in
+        let seq = basis_transform_seq_id (gate_name_id instr) ! idx in
+        replace_with_gate_ids_id qc pos seq
+      else qc)"
+
+
 definition can_insert_inverse_circuit_id ::
   "quantum_circuit_id \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat list \<Rightarrow> bool"
 where
@@ -832,8 +900,27 @@ where
 
 
 datatype obfuscation_step_id =
+  (*
+    """
+      Defines the executable obfuscation step syntax.
+
+      The datatype is symbolic and code-generation friendly. Each constructor
+      records the indices and parameters needed by one safe executable
+      transformation family.
+
+      args:
+        constructors:
+          CloakId selects a cloak replacement, DelayId selects a delayed
+          replacement, BasisId selects a basis replacement, and InsertInverseId
+          selects an inverse-pair insertion.
+
+      returns:
+        A symbolic executable obfuscation step.
+    """
+  *)
     CloakId nat nat
   | DelayId nat nat
+  | BasisId nat nat
   | InsertInverseId nat nat "nat list"
 
 
@@ -844,10 +931,10 @@ where
     """
       Applies one executable obfuscation step to an executable quantum circuit.
 
-      The supported steps are cloak replacement, delayed replacement, and
-      inverse-pair insertion. Each step uses the safe circuit-level executable
-      transformation and returns the original circuit unchanged when the request
-      is invalid.
+      The supported steps are cloak replacement, delayed replacement, basis
+      replacement, and inverse-pair insertion. Each step uses the safe
+      circuit-level executable transformation and returns the original circuit
+      unchanged when the request is invalid.
 
       args:
         qc:
@@ -864,6 +951,8 @@ where
      replace_by_cloak_circuit_id qc pos idx"
 | "apply_step_id qc (DelayId pos idx) =
      replace_by_delayed_circuit_id qc pos idx"
+| "apply_step_id qc (BasisId pos idx) =
+     replace_by_basis_circuit_id qc pos idx"
 | "apply_step_id qc (InsertInverseId pos idx params) =
      insert_inverse_circuit_id qc pos idx params"
 
@@ -1450,6 +1539,79 @@ next
 qed
 
 
+lemma valid_replace_by_basis_circuit_id:
+  (*
+    """
+      Proves that circuit-level executable basis replacement preserves
+      executable circuit validity.
+
+      If the original executable circuit is valid, then applying the safe basis
+      replacement operation produces a valid executable circuit. When the basis
+      request is invalid, the operation returns the original circuit unchanged.
+
+      args:
+        qc:
+          The executable quantum circuit.
+
+        pos:
+          The instruction position to replace.
+
+        idx:
+          The selected basis-transformation alternative.
+
+      assumptions:
+        The original executable circuit is structurally valid.
+
+      conclusion:
+        The executable circuit after basis replacement is structurally valid.
+    """
+  *)
+  assumes valid_qc: "valid_quantum_circuit_id qc"
+  shows "valid_quantum_circuit_id
+           (replace_by_basis_circuit_id qc pos idx)"
+proof (cases "can_replace_by_basis_circuit_id qc pos idx")
+  case True
+
+  then have can_replace:
+    "can_replace_at_id qc pos"
+    by (simp add: can_replace_by_basis_circuit_id_def split: if_splits)
+
+  then have pos_lt:
+    "pos < length (instructions_id qc)"
+    by (simp add: can_replace_at_id_def)
+
+  let ?instr = "(instructions_id qc) ! pos"
+  let ?seq = "(basis_transform_seq_id (gate_name_id ?instr)) ! idx"
+
+  have fits:
+    "gate_seq_fits_params_id ?seq (gate_params_id ?instr)"
+    using True
+    by (simp add:
+        can_replace_by_basis_circuit_id_def
+        can_replace_at_id_def
+        Let_def
+        split: if_splits)
+
+  have "valid_quantum_circuit_id
+          (replace_with_gate_ids_id qc pos ?seq)"
+    using valid_qc can_replace fits
+    by (rule valid_replace_with_gate_ids_id)
+
+  then show ?thesis
+    using True
+    by (simp add:
+        replace_by_basis_circuit_id_def
+        Let_def)
+
+next
+  case False
+
+  then show ?thesis
+    using valid_qc
+    by (simp add: replace_by_basis_circuit_id_def)
+qed
+
+
 lemma valid_insert_inverse_circuit_id:
   (*
     """
@@ -1533,10 +1695,10 @@ lemma valid_apply_step_id:
       Proves that applying one executable obfuscation step preserves executable
       circuit validity.
 
-      The executable step may be a cloak replacement, a delayed replacement, or
-      an inverse-pair insertion. Each of these operations is already defined as
-      a safe transformation that returns the original circuit unchanged when the
-      request is invalid.
+      The executable step may be a cloak replacement, a delayed replacement, a
+      basis replacement, or an inverse-pair insertion. Each operation is already
+      defined as a safe transformation that returns the original circuit
+      unchanged when the request is invalid.
 
       args:
         qc:
@@ -1559,6 +1721,7 @@ lemma valid_apply_step_id:
      (simp_all add:
         valid_replace_by_cloak_circuit_id
         valid_replace_by_delayed_circuit_id
+        valid_replace_by_basis_circuit_id
         valid_insert_inverse_circuit_id)
 
 
@@ -1648,8 +1811,49 @@ definition example_bell_id :: quantum_circuit_id where
 definition example_plan_id :: "obfuscation_step_id list" where
   "example_plan_id = [CloakId 0 0, InsertInverseId 1 0 [0]]"
 
+definition example_basis_x_id :: quantum_circuit_id where
+  (*
+    """
+      Defines a one-qubit executable example for basis replacement.
+
+      The example circuit contains a single symbolic X gate on qubit 0. Applying
+      the basis example plan replaces that X gate by the first symbolic basis
+      transformation alternative.
+
+      args:
+        none:
+          This example is a fixed executable circuit.
+
+      returns:
+        A one-qubit executable circuit containing one X gate.
+    """
+  *)
+  "example_basis_x_id =
+     x_id (empty_circuit_id 1) 0"
+
+definition example_basis_plan_id :: "obfuscation_step_id list" where
+  (*
+    """
+      Defines a small executable basis-transformation example plan.
+
+      The plan selects the first basis replacement alternative for the first
+      instruction of a circuit. For example_basis_x_id, this replaces the X gate
+      by the symbolic sequence H, Z, H on the same qubit.
+
+      args:
+        none:
+          This example plan is fixed.
+
+      returns:
+        A one-step executable obfuscation plan containing a basis replacement.
+    """
+  *)
+  "example_basis_plan_id = [BasisId 0 0]"
+
 value "valid_quantum_circuit_id example_bell_id"
 value "obfuscate_id example_bell_id example_plan_id"
+value "valid_quantum_circuit_id example_basis_x_id"
+value "obfuscate_id example_basis_x_id example_basis_plan_id"
 
 
 export_code
@@ -1662,8 +1866,10 @@ export_code
   instructions_from_gate_ids
   gate_seq_fits_params_id valid_params_for_gate_seq_id
   replace_with_gate_ids_id
+  basis_transform_seq_id
   can_replace_by_cloak_circuit_id replace_by_cloak_circuit_id
   can_replace_by_delayed_circuit_id replace_by_delayed_circuit_id
+  can_replace_by_basis_circuit_id replace_by_basis_circuit_id
   can_insert_inverse_circuit_id insert_inverse_circuit_id
   apply_step_id apply_plan_id obfuscate_id
   in OCaml

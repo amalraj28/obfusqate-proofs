@@ -1,4 +1,4 @@
-theory ExecutableGateNames
+﻿theory ExecutableGateNames
   imports Circuit
 begin
 
@@ -120,6 +120,39 @@ fun delayed_seq_id :: "gate_id ⇒ gate_id list list" where
       [GZ, GS, GT, GSdg, GZ]
     ]"
 | "delayed_seq_id G = [[G]]"
+
+
+subsection ‹Executable basis-transformation table›
+
+fun basis_transform_seq_id :: "gate_id ⇒ gate_id list list" where
+  (*
+    """
+      Defines the executable symbolic basis-transformation table.
+
+      The table stores basis transformations as lists of symbolic gate names,
+      keeping the executable circuit representation code-generation friendly.
+      The initial table is conservative: X, Y, and Z receive nontrivial
+      basis-style replacements, while all other gates fall back to the singleton
+      sequence containing the original gate.
+
+      args:
+        g:
+          The symbolic gate name to transform.
+
+      returns:
+        A list of symbolic replacement alternatives for the supplied gate.
+    """
+  *)
+  "basis_transform_seq_id GX = [
+      [GH, GZ, GH]
+    ]"
+| "basis_transform_seq_id GY = [
+      [GSdg, GX, GS]
+    ]"
+| "basis_transform_seq_id GZ = [
+      [GH, GX, GH]
+    ]"
+| "basis_transform_seq_id G = [[G]]"
 
 
 subsection ‹Denotation into the existing proof layer›
@@ -821,6 +854,102 @@ next
     by (simp add: denote_gate_seq_def)
 qed
 
+
+subsection ‹Bridge lemmas for basis transformations›
+
+lemma basis_transform_seq_id_correct:
+  (*
+    """
+      Proves that every executable basis-transformation sequence is correct
+      after conversion into the matrix proof layer.
+
+      The executable basis table stores alternatives using symbolic gate names.
+      This lemma shows that when a valid basis alternative is selected,
+      converting that symbolic sequence into matrices gives a local matrix
+      sequence that composes back to the matrix represented by the original
+      symbolic gate.
+
+      args:
+        g:
+          The symbolic gate being transformed.
+
+        idx:
+          The selected executable basis-transformation alternative.
+
+      assumptions:
+        The selected basis-transformation index is within the alternatives
+        available for the symbolic gate.
+
+      conclusion:
+        The selected executable basis alternative, after conversion into matrix
+        gates, composes back to the matrix represented by the original executable
+        gate.
+    """
+  *)
+  assumes idx_lt: "idx < length (basis_transform_seq_id g)"
+  shows
+    "compose (denote_gate_seq ((basis_transform_seq_id g) ! idx))
+       (dim_row (denote_gate_id g))
+     =
+     denote_gate_id g"
+proof (cases g)
+  case GX
+  then have idx_eq: "idx = 0"
+    using idx_lt by simp
+  have local_eq: "compose [H, Z, H] 2 = X"
+    using cloak_seq_correct_idx
+    by (simp add: cloak_seq_def)
+  show ?thesis
+    using GX idx_eq local_eq
+    by (simp add: denote_gate_seq_def)
+next
+  case GY
+  then have idx_eq: "idx = 0"
+    using idx_lt by simp
+
+  have local_eq: "compose [Sdg, X, S] 2 = Y"
+    using SdgXS_is_Y
+    by simp
+
+  show ?thesis
+    using GY idx_eq local_eq
+    by (simp add: denote_gate_seq_def)
+next
+  case GZ
+  then have idx_eq: "idx = 0"
+    using idx_lt by simp
+  have local_eq: "compose [H, X, H] 2 = Z"
+    using cloak_seq_correct_idx
+    by (simp add: cloak_seq_def)
+  show ?thesis
+    using GZ idx_eq local_eq
+    by (simp add: denote_gate_seq_def)
+next
+  case GH
+  then show ?thesis
+    using idx_lt by (simp add: denote_gate_seq_def)
+next
+  case GS
+  then show ?thesis
+    using idx_lt by (simp add: denote_gate_seq_def)
+next
+  case GSdg
+  then show ?thesis
+    using idx_lt by (simp add: denote_gate_seq_def)
+next
+  case GT
+  then show ?thesis
+    using idx_lt by (simp add: denote_gate_seq_def)
+next
+  case GTdg
+  then show ?thesis
+    using idx_lt by (simp add: denote_gate_seq_def)
+next
+  case GCNOT
+  then show ?thesis
+    using idx_lt by (simp add: denote_gate_seq_def)
+qed
+
 end
 
 
@@ -1160,6 +1289,7 @@ end
 subsection ‹Code generation entry points›
 
 value "cloak_seq_id GX"
+value "basis_transform_seq_id GX"
 
 value "insert_seq_id [GX, GH, GT] 1 [GT, GTdg]"
 value "replace_gate_id [GX, GH, GT] 1 [GH, GZ, GH]"
@@ -1173,7 +1303,7 @@ value "replace_by_delayed_id [GX, GH, GT] 1 0"
 value "insert_inverse_id [GX, GH, GT] 1 5"
 
 export_code
-  inverses_id cloak_seq_id delayed_seq_id
+  inverses_id cloak_seq_id delayed_seq_id basis_transform_seq_id
   insert_seq_id replace_gate_id
   replace_by_cloak_id replace_by_delayed_id insert_inverse_id
   can_replace_by_cloak_id can_replace_by_delayed_id can_insert_inverse_id

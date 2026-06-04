@@ -724,6 +724,89 @@ proof -
 qed
 
 
+lemma denote_replace_by_basis_circuit_id:
+  (*
+    """
+      Shows that circuit-level executable basis replacement agrees with
+      matrix-level replacement after denotation.
+
+      When the executable basis request is valid, the selected symbolic basis
+      sequence is used to replace the chosen executable instruction. This lemma
+      states that denoting the resulting executable circuit gives the same
+      matrix circuit as replacing the corresponding matrix instruction by the
+      denoted basis sequence.
+
+      args:
+        qc:
+          The executable symbolic quantum circuit.
+
+        pos:
+          The instruction position being replaced.
+
+        idx:
+          The selected basis-transformation alternative.
+
+      assumptions:
+        The executable circuit is structurally valid.
+
+        The circuit-level basis replacement request is valid.
+
+      conclusion:
+        Denotation commutes with valid circuit-level executable basis
+        replacement.
+    """
+  *)
+  assumes valid_qc: "valid_quantum_circuit_id qc"
+  assumes can_basis: "can_replace_by_basis_circuit_id qc pos idx"
+  shows
+    "denote_circuit_id
+       (replace_by_basis_circuit_id qc pos idx)
+     =
+     replace_with_mats
+       (denote_circuit_id qc)
+       pos
+       (denote_gate_seq
+          ((basis_transform_seq_id
+              (gate_name_id ((instructions_id qc) ! pos))) ! idx))"
+proof -
+  have can_replace:
+    "can_replace_at_id qc pos"
+    using can_basis
+    by (simp add:
+        can_replace_by_basis_circuit_id_def
+        split: if_splits)
+
+  let ?instr = "(instructions_id qc) ! pos"
+  let ?seq = "(basis_transform_seq_id (gate_name_id ?instr)) ! idx"
+
+  have fits:
+    "gate_seq_fits_params_id ?seq (gate_params_id ?instr)"
+    using can_basis
+    by (simp add:
+        can_replace_by_basis_circuit_id_def
+        can_replace_at_id_def
+        Let_def
+        split: if_splits)
+
+  have bridge:
+    "denote_circuit_id
+       (replace_with_gate_ids_id qc pos ?seq)
+     =
+     replace_with_mats
+       (denote_circuit_id qc)
+       pos
+       (denote_gate_seq ?seq)"
+    using valid_qc can_replace fits
+    by (rule denote_replace_with_gate_ids_id)
+
+  show ?thesis
+    using can_basis bridge
+    by (simp add:
+        replace_by_basis_circuit_id_def
+        Let_def)
+qed
+
+
 lemma denote_insert_inverse_circuit_id:
   (*
     """
@@ -819,11 +902,11 @@ where
       It describes what the symbolic executable step becomes after the executable
       circuit is converted into the matrix-based circuit model.
 
-      For valid cloak and delayed replacement requests, the selected symbolic
-      sequence is converted into matrix gates and used as a matrix-level
-      replacement. For valid inverse-pair insertion requests, the selected
-      symbolic inverse-pair sequence is converted into matrix gates and inserted
-      into the matrix circuit.
+      For valid cloak, delayed, and basis replacement requests, the selected
+      symbolic sequence is converted into matrix gates and used as a
+      matrix-level replacement. For valid inverse-pair insertion requests, the
+      selected symbolic inverse-pair sequence is converted into matrix gates and
+      inserted into the matrix circuit.
 
       If the executable request is invalid, the matrix circuit is left unchanged,
       matching the safe behavior of the executable circuit functions.
@@ -853,6 +936,15 @@ where
      (if can_replace_by_delayed_circuit_id qc pos idx then
         let instr = instructions_id qc ! pos;
             seq = delayed_seq_id (gate_name_id instr) ! idx
+        in replace_with_mats
+             (denote_circuit_id qc)
+             pos
+             (denote_gate_seq seq)
+      else denote_circuit_id qc)"
+| "apply_denoted_step_id qc (BasisId pos idx) =
+     (if can_replace_by_basis_circuit_id qc pos idx then
+        let instr = instructions_id qc ! pos;
+            seq = basis_transform_seq_id (gate_name_id instr) ! idx
         in replace_with_mats
              (denote_circuit_id qc)
              pos
@@ -959,6 +1051,38 @@ next
     show ?thesis
       using DelayId False
       by (simp add: replace_by_delayed_circuit_id_def)
+  qed
+
+next
+  case (BasisId pos idx)
+
+  show ?thesis
+  proof (cases "can_replace_by_basis_circuit_id qc pos idx")
+    case True
+
+    have bridge:
+      "denote_circuit_id
+         (replace_by_basis_circuit_id qc pos idx)
+       =
+       replace_with_mats
+         (denote_circuit_id qc)
+         pos
+         (denote_gate_seq
+            ((basis_transform_seq_id
+                (gate_name_id ((instructions_id qc) ! pos))) ! idx))"
+      using valid_qc True
+      by (rule denote_replace_by_basis_circuit_id)
+
+    show ?thesis
+      using BasisId True bridge
+      by (simp add: Let_def)
+
+  next
+    case False
+
+    show ?thesis
+      using BasisId False
+      by (simp add: replace_by_basis_circuit_id_def)
   qed
 
 next
@@ -1282,11 +1406,11 @@ lemma preserve_apply_denoted_step_id:
       Proves that the matrix-level effect of one executable obfuscation step
       preserves circuit semantics.
 
-      The executable step may be a cloak replacement, delayed replacement, or
-      inverse-pair insertion. If the executable request is invalid, the denoted
-      matrix circuit is left unchanged. If the request is valid, the proof uses
-      the corresponding matrix-level replacement or insertion preservation
-      theorem.
+      The executable step may be a cloak replacement, delayed replacement, basis
+      replacement, or inverse-pair insertion. If the executable request is
+      invalid, the denoted matrix circuit is left unchanged. If the request is
+      valid, the proof uses the corresponding matrix-level replacement or
+      insertion preservation theorem.
 
       args:
         qc:
@@ -1520,6 +1644,114 @@ next
 
     then show ?thesis
       using DelayId
+      by simp
+  qed
+
+next
+  case (BasisId pos idx)
+
+  show ?thesis
+  proof (cases "can_replace_by_basis_circuit_id qc pos idx")
+    case True
+
+    have can_replace:
+      "can_replace_at_id qc pos"
+      using True
+      by (simp add:
+          can_replace_by_basis_circuit_id_def
+          split: if_splits)
+
+    have pos_lt_id:
+      "pos < length (instructions_id qc)"
+      using can_replace
+      by (simp add: can_replace_at_id_def)
+
+    have pos_lt:
+      "pos < length (instructions (denote_circuit_id qc))"
+      using pos_lt_id
+      by simp
+
+    let ?instr_id = "(instructions_id qc) ! pos"
+    let ?seq = "(basis_transform_seq_id (gate_name_id ?instr_id)) ! idx"
+    let ?params = "gate_params_id ?instr_id"
+
+    have valid_instr:
+      "valid_instruction_id (num_qubits_id qc) ?instr_id"
+      using valid_qc pos_lt_id
+      by (rule valid_instruction_nth_id)
+
+    have arity_old:
+      "length ?params = gate_id_arity (gate_name_id ?instr_id)"
+      using valid_instr
+      by (simp add: valid_instruction_id_def)
+
+    have idx_lt:
+      "idx < length (basis_transform_seq_id (gate_name_id ?instr_id))"
+      using True
+      by (simp add:
+          can_replace_by_basis_circuit_id_def
+          can_replace_at_id_def
+          Let_def
+          split: if_splits)
+
+    have fits:
+      "gate_seq_fits_params_id ?seq ?params"
+      using True
+      by (simp add:
+          can_replace_by_basis_circuit_id_def
+          can_replace_at_id_def
+          Let_def
+          split: if_splits)
+
+    have fits_list:
+      "list_all (\<lambda>g. gate_id_arity g = length ?params) ?seq"
+      using fits
+      by (auto simp add:
+          gate_seq_fits_params_id_def
+          list_all_iff)
+
+    have qc_carrier:
+      "\<forall>instr \<in> set (instructions (denote_circuit_id qc)).
+         gate_matrix instr \<in> carrier_mat
+           (2 ^ length (gate_params instr))
+           (2 ^ length (gate_params instr))"
+      using has_circuit_carrier_denote_circuit_id[OF valid_qc]
+      by (simp add: has_circuit_carrier_def)
+
+    have mats_carrier:
+      "\<forall>G \<in> set (denote_gate_seq ?seq).
+         G \<in> carrier_mat
+           (2 ^ length (gate_params ((instructions (denote_circuit_id qc)) ! pos)))
+           (2 ^ length (gate_params ((instructions (denote_circuit_id qc)) ! pos)))"
+      using denote_gate_seq_carrier[OF fits_list] pos_lt_id
+      by simp
+
+    have local_eq:
+      "compose (denote_gate_seq ?seq)
+         (2 ^ length (gate_params ((instructions (denote_circuit_id qc)) ! pos))) =
+       gate_matrix ((instructions (denote_circuit_id qc)) ! pos)"
+      using basis_transform_seq_id_correct[OF idx_lt] arity_old pos_lt_id
+      by simp
+
+    have preserve:
+      "eval_circuit
+         (replace_with_mats
+           (denote_circuit_id qc)
+           pos
+           (denote_gate_seq ?seq)) =
+       eval_circuit (denote_circuit_id qc)"
+      using pos_lt qc_carrier mats_carrier local_eq
+      by (rule preserve_replace_mats)
+
+    show ?thesis
+      using BasisId True preserve
+      by (simp add: Let_def)
+
+  next
+    case False
+
+    then show ?thesis
+      using BasisId
       by simp
   qed
 
