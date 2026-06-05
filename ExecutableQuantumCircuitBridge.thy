@@ -2,7 +2,7 @@ theory ExecutableQuantumCircuitBridge
   imports ExecutableQuantumCircuit QuantumCircuitSemantics
 begin
 
-context gate
+context executable_u3_basis_gate
 begin
 
 definition denote_instruction_id :: "instruction_id \<Rightarrow> instruction" where
@@ -807,6 +807,98 @@ proof -
 qed
 
 
+lemma denote_replace_by_u3_basis_circuit_id:
+  (*
+    """
+      Shows that circuit-level symbolic U3 basis replacement agrees with matrix-level replacement after denotation.
+
+      When the executable U3 request is valid, the generated selective symbolic
+      U3 sequence replaces the chosen executable instruction. Denoting the
+      resulting executable circuit gives the same matrix circuit as replacing
+      the corresponding denoted instruction by the denoted U3 sequence.
+
+      args:
+        qc:
+          The executable symbolic quantum circuit.
+
+        pos:
+          The instruction position being replaced.
+
+        b:
+          The symbolic U3 basis identifier.
+
+      assumptions:
+        The executable circuit is structurally valid.
+
+        The circuit-level symbolic U3 basis replacement request is valid.
+
+      conclusion:
+        Denotation commutes with valid circuit-level symbolic U3 basis
+        replacement.
+    """
+  *)
+  assumes valid_qc: "valid_quantum_circuit_id qc"
+  assumes can_u3: "can_replace_by_u3_basis_circuit_id qc pos b"
+  shows
+    "denote_circuit_id
+       (replace_by_u3_basis_circuit_id qc pos b)
+     =
+     replace_with_mats
+       (denote_circuit_id qc)
+       pos
+       (denote_gate_seq
+          (u3_selective_basis_seq_id b
+            (gate_name_id ((instructions_id qc) ! pos))))"
+proof -
+  have can_replace:
+    "can_replace_at_id qc pos"
+    using can_u3
+    by (simp add:
+        can_replace_by_u3_basis_circuit_id_def
+        split: if_splits)
+
+  let ?instr = "(instructions_id qc) ! pos"
+  let ?seq = "u3_selective_basis_seq_id b (gate_name_id ?instr)"
+
+  have pos_lt:
+    "pos < length (instructions_id qc)"
+    using can_replace
+    by (simp add: can_replace_at_id_def)
+
+  have valid_instr:
+    "valid_instruction_id (num_qubits_id qc) ?instr"
+    using valid_qc pos_lt
+    by (simp add: valid_instruction_nth_id)
+
+  have arity_params:
+    "gate_id_arity (gate_name_id ?instr) = length (gate_params_id ?instr)"
+    using valid_instr
+    by (simp add: valid_instruction_id_def)
+
+  have fits:
+    "gate_seq_fits_params_id ?seq (gate_params_id ?instr)"
+    using arity_params
+    by (rule u3_selective_basis_seq_id_fits)
+
+  have bridge:
+    "denote_circuit_id
+       (replace_with_gate_ids_id qc pos ?seq)
+     =
+     replace_with_mats
+       (denote_circuit_id qc)
+       pos
+       (denote_gate_seq ?seq)"
+    using valid_qc can_replace fits
+    by (rule denote_replace_with_gate_ids_id)
+
+  show ?thesis
+    using can_u3 bridge
+    by (simp add:
+        replace_by_u3_basis_circuit_id_def
+        Let_def)
+qed
+
+
 lemma denote_insert_inverse_circuit_id:
   (*
     """
@@ -950,6 +1042,15 @@ where
              pos
              (denote_gate_seq seq)
       else denote_circuit_id qc)"
+| "apply_denoted_step_id qc (U3BasisId pos b) =
+     (if can_replace_by_u3_basis_circuit_id qc pos b then
+        let instr = instructions_id qc ! pos;
+            seq = u3_selective_basis_seq_id b (gate_name_id instr)
+        in replace_with_mats
+             (denote_circuit_id qc)
+             pos
+             (denote_gate_seq seq)
+      else denote_circuit_id qc)"
 | "apply_denoted_step_id qc (InsertInverseId pos idx params) =
      (if can_insert_inverse_circuit_id qc pos idx params then
         insert_mats
@@ -1083,6 +1184,38 @@ next
     show ?thesis
       using BasisId False
       by (simp add: replace_by_basis_circuit_id_def)
+  qed
+
+next
+  case (U3BasisId pos b)
+
+  show ?thesis
+  proof (cases "can_replace_by_u3_basis_circuit_id qc pos b")
+    case True
+
+    have bridge:
+      "denote_circuit_id
+         (replace_by_u3_basis_circuit_id qc pos b)
+       =
+       replace_with_mats
+         (denote_circuit_id qc)
+         pos
+         (denote_gate_seq
+            (u3_selective_basis_seq_id b
+              (gate_name_id ((instructions_id qc) ! pos))))"
+      using valid_qc True
+      by (rule denote_replace_by_u3_basis_circuit_id)
+
+    show ?thesis
+      using U3BasisId True bridge
+      by (simp add: Let_def)
+
+  next
+    case False
+
+    show ?thesis
+      using U3BasisId False
+      by (simp add: replace_by_u3_basis_circuit_id_def)
   qed
 
 next
@@ -1239,7 +1372,28 @@ lemma denote_obfuscate_id:
 
 end
 
-context obfuscation_semantics
+locale obfuscation_semantics_u3 =
+  (*
+    """
+      Combines executable symbolic U3 basis denotation with circuit semantics.
+
+      This locale is the bridge setting for semantic preservation of executable
+      symbolic U3 basis steps. It keeps the abstract matrix-placement semantics
+      from the proof world and adds the executable basis-denotation assumptions
+      needed to interpret symbolic U3 basis artifacts.
+
+      assumptions:
+        The matrix circuit semantics locale assumptions hold.
+
+        Symbolic executable U3 basis identifiers denote carrier-correct mutual
+        inverse matrices.
+
+      conclusion:
+        Executable circuits containing symbolic U3 basis artifacts can be
+        related to the matrix semantic preservation theorems.
+    """
+  *)
+  obfuscation_semantics + executable_u3_basis_gate
 begin
 
 
@@ -1752,6 +1906,110 @@ next
 
     then show ?thesis
       using BasisId
+      by simp
+  qed
+
+next
+  case (U3BasisId pos b)
+
+  show ?thesis
+  proof (cases "can_replace_by_u3_basis_circuit_id qc pos b")
+    case True
+
+    have can_replace:
+      "can_replace_at_id qc pos"
+      using True
+      by (simp add:
+          can_replace_by_u3_basis_circuit_id_def
+          split: if_splits)
+
+    have pos_lt_id:
+      "pos < length (instructions_id qc)"
+      using can_replace
+      by (simp add: can_replace_at_id_def)
+
+    have pos_lt:
+      "pos < length (instructions (denote_circuit_id qc))"
+      using pos_lt_id
+      by simp
+
+    let ?instr_id = "(instructions_id qc) ! pos"
+    let ?seq = "u3_selective_basis_seq_id b (gate_name_id ?instr_id)"
+    let ?params = "gate_params_id ?instr_id"
+
+    have valid_instr:
+      "valid_instruction_id (num_qubits_id qc) ?instr_id"
+      using valid_qc pos_lt_id
+      by (rule valid_instruction_nth_id)
+
+    have arity_old:
+      "length ?params = gate_id_arity (gate_name_id ?instr_id)"
+      using valid_instr
+      by (simp add: valid_instruction_id_def)
+
+    have arity_one:
+      "gate_id_arity (gate_name_id ?instr_id) = 1"
+      using True
+      by (simp add:
+          can_replace_by_u3_basis_circuit_id_def
+          can_u3_basis_gate_id_def
+          Let_def
+          split: if_splits)
+
+    have fits:
+      "gate_seq_fits_params_id ?seq ?params"
+      using arity_old
+      by (simp add: u3_selective_basis_seq_id_fits)
+
+    have fits_list:
+      "list_all (\<lambda>g. gate_id_arity g = length ?params) ?seq"
+      using fits
+      by (auto simp add:
+          gate_seq_fits_params_id_def
+          list_all_iff)
+
+    have qc_carrier:
+      "\<forall>instr \<in> set (instructions (denote_circuit_id qc)).
+         gate_matrix instr \<in> carrier_mat
+           (2 ^ length (gate_params instr))
+           (2 ^ length (gate_params instr))"
+      using has_circuit_carrier_denote_circuit_id[OF valid_qc]
+      by (simp add: has_circuit_carrier_def)
+
+    have mats_carrier:
+      "\<forall>G \<in> set (denote_gate_seq ?seq).
+         G \<in> carrier_mat
+           (2 ^ length (gate_params ((instructions (denote_circuit_id qc)) ! pos)))
+           (2 ^ length (gate_params ((instructions (denote_circuit_id qc)) ! pos)))"
+      using denote_gate_seq_carrier[OF fits_list] pos_lt_id
+      by simp
+
+    have local_eq:
+      "compose (denote_gate_seq ?seq)
+         (2 ^ length (gate_params ((instructions (denote_circuit_id qc)) ! pos))) =
+       gate_matrix ((instructions (denote_circuit_id qc)) ! pos)"
+      using u3_selective_basis_seq_id_correct[OF arity_one] arity_old pos_lt_id
+      by simp
+
+    have preserve:
+      "eval_circuit
+         (replace_with_mats
+           (denote_circuit_id qc)
+           pos
+           (denote_gate_seq ?seq)) =
+       eval_circuit (denote_circuit_id qc)"
+      using pos_lt qc_carrier mats_carrier local_eq
+      by (rule preserve_replace_mats)
+
+    show ?thesis
+      using U3BasisId True preserve
+      by (simp add: Let_def)
+
+  next
+    case False
+
+    then show ?thesis
+      using U3BasisId
       by simp
   qed
 

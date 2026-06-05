@@ -12,3 +12,4 @@ session Verification_Framework = HOL +
     CloakedGates
     DelayedGates
     QuantumCircuitSemantics
+    U3BasisTransformation

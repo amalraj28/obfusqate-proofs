@@ -1,4 +1,4 @@
-﻿theory ExecutableGateNames
+theory ExecutableGateNames
   imports Circuit
 begin
 
@@ -11,6 +11,26 @@ text ‹
   function back into the existing matrix proof world.
 ›
 
+datatype basis_id =
+  (*
+    """
+      Defines symbolic identifiers for executable basis families.
+
+      The identifier is code-generation friendly and does not store complex
+      matrices or U3 angles. Concrete angles can be sampled and stored by an
+      external backend, while Isabelle reasons about the identifier through an
+      abstract denotation locale.
+
+      args:
+        constructors:
+          BU3 stores the numeric handle of a sampled U3 basis.
+
+      returns:
+        A symbolic basis identifier.
+    """
+  *)
+  BU3 nat
+
 datatype gate_id =
     GX
   | GY
@@ -21,6 +41,9 @@ datatype gate_id =
   | GT
   | GTdg
   | GCNOT
+  | GBasis basis_id nat
+  | GInvBasis basis_id nat
+  | GConj basis_id gate_id
 
 fun gate_id_arity :: "gate_id ⇒ nat" where
   "gate_id_arity GX = 1"
@@ -32,6 +55,9 @@ fun gate_id_arity :: "gate_id ⇒ nat" where
 | "gate_id_arity GT = 1"
 | "gate_id_arity GTdg = 1"
 | "gate_id_arity GCNOT = 2"
+| "gate_id_arity (GBasis b k) = k"
+| "gate_id_arity (GInvBasis b k) = k"
+| "gate_id_arity (GConj b g) = gate_id_arity g"
 
 subsection ‹Executable inverse-pair table›
 
@@ -154,13 +180,103 @@ fun basis_transform_seq_id :: "gate_id ⇒ gate_id list list" where
     ]"
 | "basis_transform_seq_id G = [[G]]"
 
+definition u3_selective_basis_seq_id ::
+  (*
+    """
+      Builds the executable symbolic selective U3 basis sequence for one gate.
+
+      The sequence follows the selective convention: inverse basis artifact,
+      opaque conjugated gate artifact, and basis artifact. The executable layer
+      keeps all three entries symbolic and does not compute numeric U3 matrices.
+
+      args:
+        b:
+          The symbolic U3 basis identifier.
+
+        g:
+          The symbolic gate being transformed.
+
+      returns:
+        A three-gate symbolic sequence representing selective U3 conjugation.
+    """
+  *)
+  "basis_id ⇒ gate_id ⇒ gate_id list"
+where
+  "u3_selective_basis_seq_id b g =
+     [GInvBasis b (gate_id_arity g),
+      GConj b g,
+      GBasis b (gate_id_arity g)]"
+
 
 subsection ‹Denotation into the existing proof layer›
 
-context gate
+locale executable_u3_basis_gate =
+  (*
+    """
+      Extends the executable gate denotation context with abstract basis matrices.
+
+      The locale gives symbolic basis identifiers a proof-world meaning without
+      making executable circuits store matrices. It assumes that every denoted
+      basis and inverse basis has the expected carrier and that the two matrices
+      are mutual inverses.
+
+      args:
+        denote_basis_id:
+          The abstract denotation of a symbolic basis identifier at a selected
+          arity.
+
+        denote_inv_basis_id:
+          The abstract denotation of the inverse symbolic basis identifier at a
+          selected arity.
+
+      assumptions:
+        Denoted basis matrices have the carrier dimension determined by their
+        arity.
+
+        Denoted inverse basis matrices have the carrier dimension determined by
+        their arity.
+
+        The inverse basis followed by the basis gives identity.
+
+        The basis followed by the inverse basis gives identity.
+
+      conclusion:
+        Symbolic basis artifacts can be interpreted soundly in the matrix proof
+      world.
+    """
+  *)
+  gate +
+  fixes denote_basis_id :: "basis_id ⇒ nat ⇒ complex mat"
+  fixes denote_inv_basis_id :: "basis_id ⇒ nat ⇒ complex mat"
+  assumes denote_basis_id_carrier:
+    "denote_basis_id b k ∈ carrier_mat (2 ^ k) (2 ^ k)"
+  assumes denote_inv_basis_id_carrier:
+    "denote_inv_basis_id b k ∈ carrier_mat (2 ^ k) (2 ^ k)"
+  assumes denote_basis_left_inverse:
+    "denote_inv_basis_id b k * denote_basis_id b k = 1\<^sub>m (2 ^ k)"
+  assumes denote_basis_right_inverse:
+    "denote_basis_id b k * denote_inv_basis_id b k = 1\<^sub>m (2 ^ k)"
 begin
 
-fun denote_gate_id :: "gate_id ⇒ complex mat" where
+fun denote_gate_id ::
+  (*
+    """
+      Interprets an executable symbolic gate as a proof-world matrix.
+
+      Ordinary gates are mapped to their existing matrix definitions. Symbolic
+      basis artifacts are interpreted through the abstract basis denotation
+      functions supplied by the executable U3 basis locale.
+
+      args:
+        g:
+          The executable symbolic gate being interpreted.
+
+      returns:
+        The matrix denotation of the symbolic gate.
+    """
+  *)
+  "gate_id ⇒ complex mat"
+where
   "denote_gate_id GX = X"
 | "denote_gate_id GY = Y"
 | "denote_gate_id GZ = Z"
@@ -170,22 +286,199 @@ fun denote_gate_id :: "gate_id ⇒ complex mat" where
 | "denote_gate_id GT = T"
 | "denote_gate_id GTdg = Tdg"
 | "denote_gate_id GCNOT = CNOT"
+| "denote_gate_id (GBasis b k) = denote_basis_id b k"
+| "denote_gate_id (GInvBasis b k) = denote_inv_basis_id b k"
+| "denote_gate_id (GConj b g) =
+     denote_inv_basis_id b (gate_id_arity g) *
+     denote_gate_id g *
+     denote_basis_id b (gate_id_arity g)"
 
 
-lemma dim_row_denote_gate_id[simp]:
-  "dim_row (denote_gate_id g) = 2 ^ gate_id_arity g"
-  by (cases g) simp_all
+lemma carrier_mat_mult_square:
+  (*
+    """
+      Shows that multiplying two square matrices of the same carrier dimension
+      produces another square matrix of that same carrier dimension.
 
+      This helper is used for symbolic conjugated gates, whose denotation is a
+      product of an inverse basis matrix, an ordinary gate matrix, and a basis
+      matrix.
 
-lemma dim_col_denote_gate_id[simp]:
-  "dim_col (denote_gate_id g) = 2 ^ gate_id_arity g"
-  by (cases g) simp_all
+      args:
+        A:
+          The left matrix.
+
+        B:
+          The right matrix.
+
+        d:
+          The shared row and column dimension.
+
+      assumptions:
+        Both matrices are square matrices with the same dimension.
+
+      conclusion:
+        Their product is also a square matrix with that same dimension.
+    """
+  *)
+  assumes A_carrier: "A ∈ carrier_mat d d"
+  assumes B_carrier: "B ∈ carrier_mat d d"
+  shows "A * B ∈ carrier_mat d d"
+  using A_carrier B_carrier
+  by simp
 
 
 lemma denote_gate_id_carrier:
+  (*
+    """
+      Proves that every denoted executable symbolic gate has its arity carrier.
+
+      Ordinary gates are handled using their existing matrix dimensions. Symbolic
+      basis artifacts are handled using the carrier assumptions from the U3 basis
+      locale. Symbolic conjugated gates are handled by showing that the inverse
+      basis matrix, the original gate matrix, and the basis matrix are all square
+      matrices of the same dimension, and that their product therefore has the
+      same carrier.
+
+      args:
+        g:
+          The executable symbolic gate being interpreted.
+
+      assumptions:
+        None.
+
+      conclusion:
+        The denoted gate matrix is square with dimension determined by the
+        symbolic gate arity.
+    """
+  *)
   "denote_gate_id g ∈ carrier_mat
      (2 ^ gate_id_arity g)
      (2 ^ gate_id_arity g)"
+proof (induction g)
+  case GX
+  then show ?case
+    by auto
+next
+  case GY
+  then show ?case by auto
+next
+  case GZ
+  then show ?case by auto
+next
+  case GH
+  then show ?case by auto
+next
+  case GS
+  then show ?case by auto
+next
+  case GSdg
+  then show ?case by auto
+next
+  case GT
+  then show ?case by auto
+next
+  case GTdg
+  then show ?case by auto
+next
+  case GCNOT
+  then show ?case by auto
+next
+  case (GBasis b k)
+  then show ?case
+    using denote_basis_id_carrier[of b k]
+    by simp
+next
+  case (GInvBasis b k)
+  then show ?case
+    using denote_inv_basis_id_carrier[of b k]
+    by simp
+next
+  case (GConj b g)
+
+  let ?d = "2 ^ gate_id_arity g"
+
+  have inv_carrier:
+    "denote_inv_basis_id b (gate_id_arity g) ∈ carrier_mat ?d ?d"
+    using denote_inv_basis_id_carrier[of b "gate_id_arity g"]
+    by simp
+
+  have gate_carrier:
+    "denote_gate_id g ∈ carrier_mat ?d ?d"
+    using GConj.IH
+    by simp
+
+  have basis_carrier:
+    "denote_basis_id b (gate_id_arity g) ∈ carrier_mat ?d ?d"
+    using denote_basis_id_carrier[of b "gate_id_arity g"]
+    by simp
+
+  have left_product_carrier:
+    "denote_inv_basis_id b (gate_id_arity g) *
+     denote_gate_id g ∈ carrier_mat ?d ?d"
+    using inv_carrier gate_carrier
+    by simp
+
+  have full_product_carrier:
+    "denote_inv_basis_id b (gate_id_arity g) *
+     denote_gate_id g *
+     denote_basis_id b (gate_id_arity g)
+     ∈ carrier_mat ?d ?d"
+    using left_product_carrier basis_carrier
+    by simp
+
+  show ?case
+    using full_product_carrier
+    by simp
+qed
+
+
+lemma dim_row_denote_gate_id[simp]:
+  (*
+    """
+      Computes the row dimension of a denoted executable symbolic gate.
+
+      The row dimension follows from the carrier theorem for denoted symbolic
+      gates.
+
+      args:
+        g:
+          The executable symbolic gate being interpreted.
+
+      assumptions:
+        None.
+
+      conclusion:
+        The denoted gate has row dimension determined by the symbolic gate arity.
+    """
+  *)
+  "dim_row (denote_gate_id g) = 2 ^ gate_id_arity g"
+  using denote_gate_id_carrier
+  by auto
+
+
+lemma dim_col_denote_gate_id[simp]:
+  (*
+    """
+      Computes the column dimension of a denoted executable symbolic gate.
+
+      The column dimension follows from the carrier theorem for denoted symbolic
+      gates.
+
+      args:
+        g:
+          The executable symbolic gate being interpreted.
+
+      assumptions:
+        None.
+
+      conclusion:
+        The denoted gate has column dimension determined by the symbolic gate
+        arity.
+    """
+  *)
+  "dim_col (denote_gate_id g) = 2 ^ gate_id_arity g"
+  using denote_gate_id_carrier
   by auto
 
 
@@ -206,6 +499,33 @@ lemma denote_gate_seqs_simps[simp]:
   "denote_gate_seqs [] = []"
   "denote_gate_seqs (xs # xss) = denote_gate_seq xs # denote_gate_seqs xss"
   by (simp_all add: denote_gate_seqs_def)
+
+lemma compose_single_denote_gate_id[simp]:
+  (*
+    """
+      Proves that a singleton denoted gate sequence composes to that gate.
+
+      This helper is used by fallback executable sequence tables, including the
+      new symbolic basis artifact constructors, where the safe fallback is the
+      original gate alone.
+
+      args:
+        g:
+          The symbolic gate whose singleton sequence is being composed.
+
+      assumptions:
+        None.
+
+      conclusion:
+        The singleton denoted gate sequence has the same matrix meaning as the
+        original symbolic gate.
+    """
+  *)
+  "compose (denote_gate_seq [g]) (dim_row (denote_gate_id g)) =
+   denote_gate_id g"
+  using denote_gate_id_carrier
+  by simp
+
 
 subsection ‹Bridge lemmas for inverse pairs›
 
@@ -587,6 +907,18 @@ next
   show ?thesis
     using GCNOT only_choice
     by (simp add: denote_gate_seq_def)
+next
+  case (GBasis b k)
+  then show ?thesis
+    using choice_lt by (simp add: denote_gate_seq_def)
+next
+  case (GInvBasis b k)
+  then show ?thesis
+    using choice_lt by (simp add: denote_gate_seq_def)
+next
+  case (GConj b h)
+  then show ?thesis
+    using choice_lt by (simp add: denote_gate_seq_def)
 qed
 
 
@@ -619,9 +951,9 @@ lemma denote_delayed_seq_id_GS:
 
 lemma denote_delayed_seq_id_GT:
   "denote_gate_seqs (delayed_seq_id GT) = delayed_seq T"
-  by (metis (mono_tags, lifting) H_neq_T T_neq_S T_neq_X T_neq_Y T_neq_Z Z_is_gate delayed_seq_id.simps(6)
-      denote_gate_id.simps(3,5,6,7) denote_gate_seq_simps(1) denote_gate_seqs_simps(1) gate.delayed_seq_def
-      gate.denote_gate_seq_simps(2) gate.denote_gate_seqs_simps(2))
+  using H_neq_T T_neq_S T_neq_X T_neq_Y T_neq_Z delayed_seq_def delayed_seq_id.simps(6)
+    denote_gate_id.simps(3,5,6,7) denote_gate_seq_simps(1,2)
+    denote_gate_seqs_simps(1,2) by presburger
 
 
 lemma delayed_seq_id_correct:
@@ -852,6 +1184,18 @@ next
   show ?thesis
     using GCNOT only_choice
     by (simp add: denote_gate_seq_def)
+next
+  case (GBasis b k)
+  then show ?thesis
+    using choice_lt by (simp add: denote_gate_seq_def)
+next
+  case (GInvBasis b k)
+  then show ?thesis
+    using choice_lt by (simp add: denote_gate_seq_def)
+next
+  case (GConj b h)
+  then show ?thesis
+    using choice_lt by (simp add: denote_gate_seq_def)
 qed
 
 
@@ -948,7 +1292,121 @@ next
   case GCNOT
   then show ?thesis
     using idx_lt by (simp add: denote_gate_seq_def)
+next
+  case (GBasis b k)
+  then show ?thesis
+    using idx_lt by (simp add: denote_gate_seq_def)
+next
+  case (GInvBasis b k)
+  then show ?thesis
+    using idx_lt by (simp add: denote_gate_seq_def)
+next
+  case (GConj b h)
+  then show ?thesis
+    using idx_lt by (simp add: denote_gate_seq_def)
 qed
+
+lemma u3_selective_basis_seq_id_correct_general:
+  (*
+    """
+      Proves local correctness of the symbolic selective U3 basis sequence.
+
+      The executable sequence denotes an inverse basis matrix, an opaque
+      conjugated gate matrix, and the basis matrix. These three matrices follow
+      the selective basis convention and compose back to the original gate.
+
+      args:
+        b:
+          The symbolic basis identifier used by the sequence.
+
+        g:
+          The symbolic gate being transformed.
+
+      assumptions:
+        None.
+
+      conclusion:
+        The denoted symbolic U3 selective basis sequence composes back to the
+        original denoted gate.
+    """
+  *)
+  shows
+    "compose (denote_gate_seq (u3_selective_basis_seq_id b g))
+       (2 ^ gate_id_arity g)
+     =
+     denote_gate_id g"
+proof -
+  let ?d = "2 ^ gate_id_arity g"
+  let ?B = "denote_basis_id b (gate_id_arity g)"
+  let ?Binv = "denote_inv_basis_id b (gate_id_arity g)"
+  let ?G = "denote_gate_id g"
+
+  have B_carrier: "?B ∈ carrier_mat ?d ?d"
+    by (rule denote_basis_id_carrier)
+  have Binv_carrier: "?Binv ∈ carrier_mat ?d ?d"
+    by (rule denote_inv_basis_id_carrier)
+  have G_carrier: "?G ∈ carrier_mat ?d ?d"
+    by (rule denote_gate_id_carrier)
+  have BinvG_carrier: "?Binv * ?G ∈ carrier_mat ?d ?d"
+    using Binv_carrier G_carrier by simp
+  have BinvGB_carrier: "?Binv * ?G * ?B ∈ carrier_mat ?d ?d"
+    using BinvG_carrier B_carrier by simp
+
+  have "compose (denote_gate_seq (u3_selective_basis_seq_id b g)) ?d =
+        ?B * ((?Binv * ?G * ?B) * ?Binv)"
+    using B_carrier Binv_carrier BinvGB_carrier
+    by (simp add:
+        u3_selective_basis_seq_id_def
+        denote_gate_seq_def)
+  also have "... = ?B * ((?Binv * ?G) * (?B * ?Binv))"
+    using B_carrier Binv_carrier G_carrier BinvG_carrier
+    by (smt (verit) assoc_mult_mat mult_carrier_mat)
+  also have "... = ?B * ((?Binv * ?G) * 1\<^sub>m ?d)"
+    using denote_basis_right_inverse by simp
+  also have "... = ?B * (?Binv * ?G)"
+    using BinvG_carrier by auto
+  also have "... = (?B * ?Binv) * ?G"
+    using B_carrier Binv_carrier G_carrier
+    by (simp add: assoc_mult_mat)
+  also have "... = 1\<^sub>m ?d * ?G"
+    using denote_basis_right_inverse by simp
+  also have "... = ?G"
+    using G_carrier by auto
+  finally show ?thesis .
+qed
+
+lemma u3_selective_basis_seq_id_correct:
+  (*
+    """
+      Proves single-qubit local correctness of symbolic selective U3 basis transformation.
+
+      This is the first executable U3 theorem used by circuit-level replacement.
+      It specializes the general symbolic selective proof to gates whose arity
+      is one.
+
+      args:
+        b:
+          The symbolic U3 basis identifier.
+
+        g:
+          The single-qubit symbolic gate being transformed.
+
+      assumptions:
+        The transformed gate has arity one.
+
+      conclusion:
+        The denoted three-gate symbolic U3 sequence composes back to the
+        original denoted gate.
+    """
+  *)
+  assumes arity_one: "gate_id_arity g = 1"
+  shows
+    "compose (denote_gate_seq (u3_selective_basis_seq_id b g))
+       (dim_row (denote_gate_id g))
+     =
+     denote_gate_id g"
+  using u3_selective_basis_seq_id_correct_general[of b g] arity_one
+  by simp
 
 end
 
@@ -1166,7 +1624,7 @@ where
       else qc)"
 
 
-context gate
+context executable_u3_basis_gate
 begin
 
 lemma denote_insert_seq_id:
