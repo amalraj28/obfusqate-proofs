@@ -13,3 +13,5 @@ session Verification_Framework = HOL +
     DelayedGates
     QuantumCircuitSemantics
     U3BasisTransformation
+    ExecutableIdentityExpansion
+    ExecutableIdentityExpansionExamples

@@ -44,11 +44,6 @@ definition U3_inv ::
     """
     Builds the inverse basis matrix for U3.
 
-    The inverse is written directly as the conjugate-transpose matrix of U3.
-    Defining it explicitly avoids parser and coercion ambiguity around dagger
-    notation, while still giving the same mathematical inverse used in the U3
-    basis transformation proof.
-
     args:
       theta:
         The rotation angle used by the U3 matrix being inverted.
@@ -75,12 +70,10 @@ where
          exp (- \<i> * complex_of_real (phi + lambda)) *
              complex_of_real (cos (theta / 2))]]"
 
-lemma U3_carrier[simp]:
+lemma U3_is_carrier_mat[simp]:
   (*
     """
     Proves that every U3 matrix has the expected two-by-two carrier.
-
-    The result gives the abstract basis framework the matrix-dimension fact needed to compose U3 with single-qubit gates.
 
     args:
       theta:
@@ -91,9 +84,6 @@ lemma U3_carrier[simp]:
 
       lambda:
         The lambda phase of the U3 matrix.
-
-    assumptions:
-      None.
 
     conclusion:
       The U3 matrix is a two-row, two-column complex matrix.
@@ -110,8 +100,6 @@ lemma U3_dim_row[simp]:
     """
     Computes the row dimension of a U3 matrix.
 
-    This simp lemma exposes the fixed single-qubit size of U3 to later carrier and preservation proofs.
-
     args:
       theta:
         The rotation angle of the U3 matrix.
@@ -121,9 +109,6 @@ lemma U3_dim_row[simp]:
 
       lambda:
         The lambda phase of the U3 matrix.
-
-    assumptions:
-      None.
 
     conclusion:
       The U3 matrix has two rows.
@@ -137,8 +122,6 @@ lemma U3_dim_col[simp]:
     """
     Computes the column dimension of a U3 matrix.
 
-    This simp lemma exposes the fixed single-qubit size of U3 to later carrier and preservation proofs.
-
     args:
       theta:
         The rotation angle of the U3 matrix.
@@ -149,9 +132,6 @@ lemma U3_dim_col[simp]:
       lambda:
         The lambda phase of the U3 matrix.
 
-    assumptions:
-      None.
-
     conclusion:
       The U3 matrix has two columns.
     """
@@ -160,7 +140,7 @@ lemma U3_dim_col[simp]:
   by (simp add: U3_def mat_of_cols_list_def)
 
 
-lemma U3_inv_carrier[simp]:
+lemma U3_inv_is_carrier_mat[simp]:
   (*
     """
     Proves that every U3 inverse matrix has the expected two-by-two carrier.
@@ -177,9 +157,6 @@ lemma U3_inv_carrier[simp]:
       lambda:
         The lambda phase of the U3 inverse.
 
-    assumptions:
-      None.
-
     conclusion:
       The U3 inverse matrix is a two-row, two-column complex matrix.
     """
@@ -195,8 +172,6 @@ lemma U3_inv_dim_row[simp]:
   (*
     """
     Computes the row dimension of a U3 inverse matrix.
-
-    This simp lemma exposes the fixed single-qubit size of the U3 inverse to later carrier and preservation proofs.
 
     args:
       theta:
@@ -216,15 +191,13 @@ lemma U3_inv_dim_row[simp]:
     """
   *)
   "dim_row (U3_inv theta phi lambda) = 2"
-  using U3_inv_carrier by blast
+  using U3_inv_is_carrier_mat by blast
 
 
 lemma U3_inv_dim_col[simp]:
   (*
     """
     Computes the column dimension of a U3 inverse matrix.
-
-    This simp lemma exposes the fixed single-qubit size of the U3 inverse to later carrier and preservation proofs.
 
     args:
       theta:
@@ -236,15 +209,12 @@ lemma U3_inv_dim_col[simp]:
       lambda:
         The lambda phase of the U3 inverse.
 
-    assumptions:
-      None.
-
     conclusion:
       The U3 inverse matrix has two columns.
     """
   *)
   "dim_col (U3_inv theta phi lambda) = 2"
-  using U3_inv_carrier by blast
+  using U3_inv_is_carrier_mat by blast
 
 
 lemma unit_phase_left_cancel[simp]:
@@ -258,39 +228,14 @@ lemma unit_phase_left_cancel[simp]:
       x:
         The real phase angle.
 
-    assumptions:
-      None.
-
     conclusion:
       The product of exp(-i x) and exp(i x) is one.
     """
   *)
   fixes x :: real
   shows "exp (- (\<i> * x)) * exp (\<i> * x) = 1"
-  using exp_minus_inverse by (auto simp add: algebra_simps)
+  by (simp add: exp_minus')
 
-
-lemma unit_phase_right_cancel[simp]:
-  (*
-    """
-    Cancels a unit complex phase preceded by its inverse phase.
-
-    This helper is used when expanding products of U3 entries in the inverse proofs.
-
-    args:
-      x:
-        The real phase angle.
-
-    assumptions:
-      None.
-
-    conclusion:
-      The product of exp(i x) and exp(-i x) is one.
-    """
-  *)
-  fixes x :: real
-  shows "exp (\<i> * x) * exp (- (\<i> * x)) = 1"
-  using exp_minus_inverse by (auto simp add: algebra_simps)
 
 lemma unit_phase_shift_cancel[simp]:
   (*
@@ -305,9 +250,6 @@ lemma unit_phase_shift_cancel[simp]:
 
       y:
         The remaining phase after cancellation.
-
-    assumptions:
-      None.
 
     conclusion:
       Multiplying exp(-i x) by exp(i (x + y)) leaves exp(i y).
@@ -332,9 +274,6 @@ lemma unit_phase_shift_cancel_right[simp]:
       y:
         The phase that is cancelled.
 
-    assumptions:
-      None.
-
     conclusion:
       Multiplying exp(i (x + y)) by exp(-i y) leaves exp(i x).
     """
@@ -343,19 +282,14 @@ lemma unit_phase_shift_cancel_right[simp]:
   shows "exp (\<i> * (x + y)) * exp (- (\<i> * y)) = exp (\<i> * x)"
   by (simp add: mult_exp_exp algebra_simps)
 
-lemma complex_sin_cos_squared_add:
+lemma sin_squared_plus_cos_squared:
   (*
     """
     Lifts the real sine-cosine square identity into complex arithmetic.
 
-    This helper discharges the diagonal entries in the U3 inverse proofs after phase factors have cancelled.
-
     args:
       x:
         The real angle whose sine and cosine terms are being combined.
-
-    assumptions:
-      None.
 
     conclusion:
       The complex sum cos(x) * cos(x) + sin(x) * sin(x) is one.
@@ -386,9 +320,6 @@ lemma U3_inv_left_inverse:
       lambda:
         The lambda phase of the U3 matrix.
 
-    assumptions:
-      None.
-
     conclusion:
       Multiplying U3_inv by U3 gives the two-by-two identity matrix.
     """
@@ -404,7 +335,7 @@ proof
 
   show "(U3_inv theta phi lambda * U3 theta phi lambda) $$ (i, j) =
         1\<^sub>m 2 $$ (i, j)"
-    using ij complex_sin_cos_squared_add[of "theta / 2"]
+    using ij sin_squared_plus_cos_squared[of "theta / 2"]
     apply (auto simp add:
         U3_def
         U3_inv_def
@@ -412,8 +343,9 @@ proof
         set_2
         mult_exp_exp
         algebra_simps)
-    apply (simp add: vector_space_over_itself.scale_scale)
+    apply (simp add: vector_space_over_itself.scale_scale exp_minus_inverse)
     by (simp add: exp_minus')
+    
 next
   show "dim_row (U3_inv theta phi lambda * U3 theta phi lambda) =
         dim_row (1\<^sub>m 2)"
@@ -444,9 +376,6 @@ lemma U3_inv_right_inverse:
       lambda:
         The lambda phase of the U3 matrix.
 
-    assumptions:
-      None.
-
     conclusion:
       Multiplying U3 by U3_inv gives the two-by-two identity matrix.
     """
@@ -462,7 +391,7 @@ proof
 
   show "(U3 theta phi lambda * U3_inv theta phi lambda) $$ (i, j) =
         1\<^sub>m 2 $$ (i, j)"
-    using ij complex_sin_cos_squared_add[of "theta / 2"]
+    using ij sin_squared_plus_cos_squared[of "theta / 2"]
     apply (auto simp add:
         U3_def
         U3_inv_def
@@ -516,7 +445,7 @@ lemma U3_global_basis_sequence_correct:
   assumes G_carrier: "G \<in> carrier_mat 2 2"
   shows "compose (global_basis_sequence
           (U3 theta phi lambda) (U3_inv theta phi lambda) G) 2 = G"
-  using U3_carrier U3_inv_carrier G_carrier U3_inv_left_inverse U3_inv_right_inverse
+  using U3_is_carrier_mat U3_inv_is_carrier_mat G_carrier U3_inv_left_inverse U3_inv_right_inverse
   by (rule global_basis_sequence_correct)
 
 lemma U3_selective_basis_sequence_correct:
@@ -549,7 +478,7 @@ lemma U3_selective_basis_sequence_correct:
   assumes G_carrier: "G \<in> carrier_mat 2 2"
   shows "compose (selective_basis_sequence
           (U3 theta phi lambda) (U3_inv theta phi lambda) G) 2 = G"
-  using U3_carrier U3_inv_carrier G_carrier
+  using U3_is_carrier_mat U3_inv_is_carrier_mat G_carrier
         U3_inv_left_inverse U3_inv_right_inverse
   by (rule selective_basis_sequence_correct)
 

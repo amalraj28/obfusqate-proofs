@@ -1373,8 +1373,8 @@ lemma preserve_selective_basis:
     "\<forall>instr \<in> set (instructions qc).
        gate_matrix instr \<in> carrier_mat (2 ^ length (gate_params instr))
                                      (2 ^ length (gate_params instr))"
-  assumes B_carrier:
-    "B \<in> carrier_mat
+  assumes B_carrier:          
+    "B \<in> carrier_mat 
           (2 ^ length (gate_params ((instructions qc) ! pos)))
           (2 ^ length (gate_params ((instructions qc) ! pos)))"
   assumes Binv_carrier:
