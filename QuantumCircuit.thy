@@ -46,20 +46,28 @@ definition valid_operation :: "operation \<Rightarrow> bool" where
    record \<Rightarrow> Structured object with named fields (like struct in C++)
 *)
 
-datatype dag_node = (* Node of a DAG can be InputNode, OutputNode or OperationNode (gate) *)
+datatype circuit_node = (* Node of a DAG can be InputNode, OutputNode or OperationNode (gate) *)
     InputNode qubit
   | OutputNode qubit
   | OperationNode operation
 
 
-record dag_edge = (* A DAG edge would need source, target and the wire name (qubit) it represents*)
+record edge = (* A DAG edge would need source, target and the wire name (qubit) it represents*)
   edge_source :: node_id
   edge_target :: node_id
   edge_wire :: qubit
 
 
-definition make_edge :: "node_id \<Rightarrow> node_id \<Rightarrow> qubit \<Rightarrow> dag_edge" where
+definition make_edge :: "node_id \<Rightarrow> node_id \<Rightarrow> qubit \<Rightarrow> edge" where
+  (* Create an edge between source u, target v on wire (qubit) q *)
   "make_edge u v q = \<lparr> edge_source = u, edge_target = v, edge_wire = q \<rparr>"
+
+
+record quantum_circuit = (* Quantum circuit DAG has these 4 parameters *)
+  num_qubits :: nat (* Number of qubits in the circuit  *)
+  nodes :: "node_id \<Rightarrow> circuit_node option" (* Node table mapping node ID to actual node *)
+  edges :: "edge set" (* Set of wire-labelled connections (source node to target node along this wire) *)
+  next_id :: node_id (* Next unused node ID for inserting a new operation node *)
 
 (* Example definitions to demonstrate gate and operation *)
 
