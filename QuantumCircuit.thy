@@ -69,6 +69,55 @@ record quantum_circuit = (* Quantum circuit DAG has these 4 parameters *)
   edges :: "edge set" (* Set of wire-labelled connections (source node to target node along this wire) *)
   next_id :: node_id (* Next unused node ID for inserting a new operation node *)
 
+
+(* Extract the qubit index from Qubit type (for example, 0 from q0) *)
+fun qubit_index :: "qubit \<Rightarrow> nat" where
+  "qubit_index (Qubit n) = n"
+
+(* Extract the node index from node_id *)
+fun node_index :: "node_id \<Rightarrow> nat" where
+  "node_index (NodeId n) = n"
+
+
+(* --- Defines a fixed way to assign IDs to the special boundary nodes (inputs and outputs) --- *)
+(* We follow canonical numbering for now:
+   ID of input_node of qubit q = 2 * q
+   ID of output_node of qubit q = 2 * q + 1
+   ID of first operation node (when there are n qubits) = 2 * n
+*)
+
+(* If we have to move away from canonical numbering, just change these definitions *)
+
+definition input_node_id :: "qubit \<Rightarrow> node_id" where
+  "input_node_id q = NodeId (2 * qubit_index q)"
+
+definition output_node_id :: "qubit \<Rightarrow> node_id" where
+  "output_node_id q = NodeId (2 * qubit_index q + 1)"
+
+definition first_operation_id :: "nat \<Rightarrow> node_id" where
+  "first_operation_id n = NodeId (2 * n)"
+   (* can later on replace nat with quantum_circuit since it already has num_qubits as a parameter*)
+
+
+lemma input_output_ids_distinct[simp]: (* No input node ID is ever equal to an output node ID (even and odd numbers) *)
+  "input_node_id q \<noteq> output_node_id r"
+  unfolding input_node_id_def output_node_id_def
+  apply (cases q; cases r; simp)
+  by arith
+
+
+lemma input_node_id_injective: (* 2 different input nodes cannot have same node ID *)
+  "input_node_id q = input_node_id r \<Longrightarrow> q = r"
+  unfolding input_node_id_def
+  by (cases q; cases r; simp)
+
+
+lemma output_node_id_injective: (* 2 different output nodes cannot have same node ID *)
+  "output_node_id q = output_node_id r \<Longrightarrow> q = r"
+  unfolding output_node_id_def
+  by (cases q; cases r; simp)
+
+
 (* Example definitions to demonstrate gate and operation *)
 
 definition ex_h_q0 :: operation where
