@@ -1,0 +1,4 @@
+AFP/
+.isabelle/
+*.ps1
+*.thy~
