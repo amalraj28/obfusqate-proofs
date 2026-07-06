@@ -43,6 +43,11 @@ definition valid_operation :: "operation \<Rightarrow> bool" where
      distinct (op_qargs op)"
 
 
+datatype dag_node = (* Node of a DAG can be InputNode, OutputNode or OperationNode (gate) *)
+    InputNode qubit
+  | OutputNode qubit
+  | OperationNode operation
+
 
 (* Example definitions to demonstrate gate and operation *)
 
