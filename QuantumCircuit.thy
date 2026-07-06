@@ -42,12 +42,24 @@ definition valid_operation :: "operation \<Rightarrow> bool" where
      length (op_qargs op) = gate_arity (op_gate op) \<and>
      distinct (op_qargs op)"
 
+(* datatype \<Rightarrow> alternatives/cases
+   record \<Rightarrow> Structured object with named fields (like struct in C++)
+*)
 
 datatype dag_node = (* Node of a DAG can be InputNode, OutputNode or OperationNode (gate) *)
     InputNode qubit
   | OutputNode qubit
   | OperationNode operation
 
+
+record dag_edge = (* A DAG edge would need source, target and the wire name (qubit) it represents*)
+  edge_source :: node_id
+  edge_target :: node_id
+  edge_wire :: qubit
+
+
+definition make_edge :: "node_id \<Rightarrow> node_id \<Rightarrow> qubit \<Rightarrow> dag_edge" where
+  "make_edge u v q = \<lparr> edge_source = u, edge_target = v, edge_wire = q \<rparr>"
 
 (* Example definitions to demonstrate gate and operation *)
 
