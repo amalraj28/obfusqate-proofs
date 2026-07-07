@@ -158,7 +158,6 @@ definition initial_circuit :: "nat \<Rightarrow> quantum_circuit" where
      \<rparr>
   "
 
-
 (* --- Some lemmas to prove basic properties of empty circuits --- *)
 
 lemma initial_circuit_num_qubits[simp]:
@@ -168,7 +167,7 @@ lemma initial_circuit_num_qubits[simp]:
   by simp
 
 lemma initial_circuit_next_id[simp]:
-  (* After initializing a circuit, the next available id would be for indicating the OperationNode (gates) *)
+  (* After initialization, the next available ID is the first operation-node ID. *)
   "next_id (initial_circuit number_of_qubits) =
    first_operation_id number_of_qubits"
   unfolding initial_circuit_def
@@ -207,6 +206,64 @@ lemma initial_circuit_has_wire_edge:
   by auto
 
 (* ------- Basic properties' lemma completed ----------- *)
+
+
+(* ----------- Simple query helpers ----------- *)
+definition node_exists :: "quantum_circuit \<Rightarrow> node_id \<Rightarrow> bool" where
+  (* Checks whether a node Id exists in the given quantum circuit *)
+  "node_exists circuit node_id \<longleftrightarrow>
+     nodes circuit node_id \<noteq> None
+  "
+
+fun node_uses_qubit :: "circuit_node \<Rightarrow> qubit \<Rightarrow> bool" where
+  (* Given a circuit node and a qubit (wire), this function checks whether the circuit node lies on the given qubit wire *)
+  "node_uses_qubit (InputNode q) r = (q = r)"
+| "node_uses_qubit (OutputNode q) r = (q = r)"
+| "node_uses_qubit (OperationNode op) r = (r \<in> set (op_qargs op))"
+
+(* --------- Simple query helpers ends --------- *)
+
+
+(* ------ Edge well-formedness definitions begin --------- *)
+
+definition qubit_in_circuit :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> bool" where
+  (* Given a quantum circuit and a qubit, returns true if the qubit is in the range [0, num_qubits-1] (that is, the qubit is a valid one) *)
+  "qubit_in_circuit circuit q \<longleftrightarrow>
+     get_qubit_index q < num_qubits circuit"
+
+
+definition is_well_formed_edge :: "quantum_circuit \<Rightarrow> edge \<Rightarrow> bool" where
+  (* An edge is well-formed (valid) iff
+      1. The source node exists in the circuit
+      2. The target node exists in the circuit
+      3. The edge wire (qubit) is valid for the given circuit
+      4. The source node should lie on the edge wire
+      5. The target node should lie on the edge wire
+  *)
+  "is_well_formed_edge circuit e \<longleftrightarrow>
+      node_exists circuit (edge_source e)
+    \<and> node_exists circuit (edge_target e)
+    \<and> qubit_in_circuit circuit (edge_wire e)
+    \<and> (
+        case nodes circuit (edge_source e) of
+          Some source_node \<Rightarrow> node_uses_qubit source_node (edge_wire e)
+          | None \<Rightarrow> False
+      )
+    \<and> (
+        case nodes circuit (edge_target e) of
+          Some target_node \<Rightarrow> node_uses_qubit target_node (edge_wire e)
+          | None \<Rightarrow> False
+      )
+  "
+
+definition are_well_formed_edges :: "quantum_circuit \<Rightarrow> bool" where
+  (* Checks if all edges present in the quantum circuit are well-formed *)
+  "are_well_formed_edges circuit \<longleftrightarrow>
+     (\<forall>e \<in> edges circuit. is_well_formed_edge circuit e
+     )
+  "
+
+(* -------- Edge well-formedness definitions end --------- *)
 
 (* Example definitions to demonstrate gate and operation *)
 
