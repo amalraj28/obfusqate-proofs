@@ -287,6 +287,39 @@ definition are_well_formed_operation_nodes :: "quantum_circuit \<Rightarrow> boo
      )
   "
 
+
+(* ---- Validity check (Well-formedness check) for entire circuit begins ---- *)
+
+definition are_well_formed_boundary_nodes :: "quantum_circuit \<Rightarrow> bool" where
+  (* Checks whether every valid qubit in the circuit has the correct canonical input and output nodes (boundary nodes) *)
+
+  (* Add checks to ensure that there are no invalid boundary nodes anywhere as well, meaning an input node like InputNode (Qubit 999) doesn't exist *)
+  "are_well_formed_boundary_nodes circuit \<longleftrightarrow>
+     (
+        \<forall>qubit_number < num_qubits circuit.
+          nodes circuit (input_node_id (Qubit qubit_number))
+            = Some (InputNode (Qubit qubit_number))
+        \<and> nodes circuit (output_node_id (Qubit qubit_number))
+            = Some (OutputNode (Qubit qubit_number))
+     )
+  "
+
+
+definition is_well_formed_circuit :: "quantum_circuit \<Rightarrow> bool" where
+  (* A circuit is well-formed iff
+      1. Its boundary input/output nodes are well-formed
+      2. All its edges are well-formed
+      3. All its operation nodes are well-formed
+  *)
+  "is_well_formed_circuit circuit \<longleftrightarrow>
+       are_well_formed_boundary_nodes circuit
+     \<and> are_well_formed_edges circuit
+     \<and> are_well_formed_operation_nodes circuit
+  "
+
+
+(* ----- Validity check (Well-formedness check) for entire circuit ends ----- *)
+
 (* Example definitions to demonstrate gate and operation *)
 
 definition ex_h_q0 :: operation where
