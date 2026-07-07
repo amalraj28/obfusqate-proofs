@@ -265,6 +265,28 @@ definition are_well_formed_edges :: "quantum_circuit \<Rightarrow> bool" where
 
 (* -------- Edge well-formedness definitions end --------- *)
 
+(* ---- Check validity of OperationNodes in the circuit ---------- *)
+
+definition operation_in_circuit :: "quantum_circuit \<Rightarrow> operation \<Rightarrow> bool" where
+  (* Checks whether a given operation belongs to the given quantum circuit. An operation belongs to the given circuit iff
+      1. The operation itself is valid (correct arity and distinct qubits)
+      2. Every qubit used by the operation belongs to the circuit
+  *)
+  "operation_in_circuit circuit op \<longleftrightarrow>
+      valid_operation op
+    \<and> (\<forall>q \<in> set (op_qargs op). qubit_in_circuit circuit q)
+  "
+
+definition are_well_formed_operation_nodes :: "quantum_circuit \<Rightarrow> bool" where
+  (* Checks whether every OperationNode stored in the circuit is well-formed. That is, every operation node must contain an operation that is valid for this circuit.
+  *)
+  "are_well_formed_operation_nodes circuit \<longleftrightarrow>
+     (\<forall>node_id op.
+        nodes circuit node_id = Some (OperationNode op) \<longrightarrow>
+        operation_in_circuit circuit op
+     )
+  "
+
 (* Example definitions to demonstrate gate and operation *)
 
 definition ex_h_q0 :: operation where
