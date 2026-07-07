@@ -65,18 +65,18 @@ definition make_edge :: "node_id \<Rightarrow> node_id \<Rightarrow> qubit \<Rig
 
 record quantum_circuit = (* Quantum circuit DAG has these 4 parameters *)
   num_qubits :: nat (* Number of qubits in the circuit  *)
-  nodes :: "node_id \<Rightarrow> circuit_node option" (* Node table mapping node ID to actual node *)
+  nodes :: "node_id \<Rightarrow> circuit_node option" (* Node table mapping node ID to actual node; it means "either Some circuit_node or None" *)
   edges :: "edge set" (* Set of wire-labelled connections (source node to target node along this wire) *)
   next_id :: node_id (* Next unused node ID for inserting a new operation node *)
 
 
 (* Extract the qubit index from Qubit type (for example, 0 from q0) *)
-fun qubit_index :: "qubit \<Rightarrow> nat" where
-  "qubit_index (Qubit n) = n"
+fun get_qubit_index :: "qubit \<Rightarrow> nat" where
+  "get_qubit_index (Qubit n) = n"
 
 (* Extract the node index from node_id *)
-fun node_index :: "node_id \<Rightarrow> nat" where
-  "node_index (NodeId n) = n"
+fun get_node_index :: "node_id \<Rightarrow> nat" where
+  "get_node_index (NodeId n) = n"
 
 
 (* --- Defines a fixed way to assign IDs to the special boundary nodes (inputs and outputs) --- *)
@@ -89,10 +89,10 @@ fun node_index :: "node_id \<Rightarrow> nat" where
 (* If we have to move away from canonical numbering, just change these definitions *)
 
 definition input_node_id :: "qubit \<Rightarrow> node_id" where
-  "input_node_id q = NodeId (2 * qubit_index q)"
+  "input_node_id q = NodeId (2 * get_qubit_index q)"
 
 definition output_node_id :: "qubit \<Rightarrow> node_id" where
-  "output_node_id q = NodeId (2 * qubit_index q + 1)"
+  "output_node_id q = NodeId (2 * get_qubit_index q + 1)"
 
 definition first_operation_id :: "nat \<Rightarrow> node_id" where
   "first_operation_id n = NodeId (2 * n)"
@@ -117,6 +117,96 @@ lemma output_node_id_injective: (* 2 different output nodes cannot have same nod
   unfolding output_node_id_def
   by (cases q; cases r; simp)
 
+
+(* Create an empty circuit with n qubits (The initial DAG) *)
+
+definition initial_nodes :: "nat \<Rightarrow> node_id \<Rightarrow> circuit_node option" where
+  (* Given the number of qubits in the circuit and a node ID, create the corresponding node *)
+  (* Id of InputNode is even, while that of OutputNode is odd *)
+  (* If node_number \<ge> 2 * num_qubits, then it is unused in the initial circuit. Operation nodes will be added later. *)
+  "initial_nodes number_of_qubits node_number = 
+    (let node_index = get_node_index node_number in
+      if node_index < 2 * number_of_qubits then
+        if even node_index
+        then Some (InputNode (Qubit (node_index div 2)))
+        else Some (OutputNode (Qubit (node_index div 2)))
+      else None
+    )
+  "
+
+
+definition initial_edges :: "nat \<Rightarrow> edge set" where
+  (* Given the number of qubits in the circuit, make an edge from each InputNode Input_i (ranging from 0 to num_qubits-1) to each OutputNode Output_i *)
+  "initial_edges number_of_qubits =
+     {
+        make_edge
+          (input_node_id (Qubit qubit_number))
+          (output_node_id (Qubit qubit_number))
+          (Qubit qubit_number)
+        | qubit_number. qubit_number < number_of_qubits
+     }
+  "
+
+
+definition initial_circuit :: "nat \<Rightarrow> quantum_circuit" where
+  (* Given the number of qubits in the circuit (say nq), create an empty quantum circuit that has num_qubits = nq, and nq InputNodes and nq OutputNodes, and each InputNode connected to corresponding OutputNode by an edge *)
+  "initial_circuit number_of_qubits =
+     \<lparr> num_qubits = number_of_qubits,
+       nodes = initial_nodes number_of_qubits,
+       edges = initial_edges number_of_qubits,
+       next_id = first_operation_id number_of_qubits 
+     \<rparr>
+  "
+
+
+(* --- Some lemmas to prove basic properties of empty circuits --- *)
+
+lemma initial_circuit_num_qubits[simp]:
+  (* Number of qubits in initial circuit = whatever natural number was passed to initial_circuit *)
+  "num_qubits (initial_circuit number_of_qubits) = number_of_qubits"
+  unfolding initial_circuit_def
+  by simp
+
+lemma initial_circuit_next_id[simp]:
+  (* After initializing a circuit, the next available id would be for indicating the OperationNode (gates) *)
+  "next_id (initial_circuit number_of_qubits) =
+   first_operation_id number_of_qubits"
+  unfolding initial_circuit_def
+  by simp
+
+lemma initial_circuit_input_node:
+  (* For any valid qubit number, the canonical input node ID stores the corresponding InputNode. *)
+  assumes "qubit_number < number_of_qubits"
+  shows "nodes (initial_circuit number_of_qubits)
+          (input_node_id (Qubit qubit_number))
+        = Some (InputNode (Qubit qubit_number))" (* nodes is a record selector, meaning since it is defined inside the record, we have to pass the record itself as the first parameter *)
+  using assms
+  unfolding initial_circuit_def initial_nodes_def input_node_id_def
+  by simp
+
+lemma initial_circuit_output_node:
+  (* For any valid qubit number, the canonical output node ID stores the corresponding OutputNode. *)
+  assumes "qubit_number < number_of_qubits"
+  shows "nodes (initial_circuit number_of_qubits)
+          (output_node_id (Qubit qubit_number))
+        = Some (OutputNode (Qubit qubit_number))" (* nodes is a record selector, meaning since it is defined inside the record, we have to pass the record itself as the first parameter *)
+  using assms
+  unfolding initial_circuit_def initial_nodes_def output_node_id_def
+  by simp
+
+lemma initial_circuit_has_wire_edge:
+  (* For any valid qubit number, the initial circuit contains the direct wire edge from input to output. *)
+  assumes "qubit_number < number_of_qubits"
+  shows "make_edge
+          (input_node_id (Qubit qubit_number))
+          (output_node_id (Qubit qubit_number))
+          (Qubit qubit_number)
+        \<in> edges (initial_circuit number_of_qubits)" (* edges is a record selector, meaning since it is defined inside the record, we have to pass the record itself as the first parameter *)
+  using assms
+  unfolding initial_circuit_def initial_edges_def
+  by auto
+
+(* ------- Basic properties' lemma completed ----------- *)
 
 (* Example definitions to demonstrate gate and operation *)
 
