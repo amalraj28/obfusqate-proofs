@@ -75,8 +75,8 @@ fun get_qubit_index :: "qubit \<Rightarrow> nat" where
   "get_qubit_index (Qubit n) = n"
 
 (* Extract the node index from node_id *)
-fun get_node_index :: "node_id \<Rightarrow> nat" where
-  "get_node_index (NodeId n) = n"
+fun node_id_to_nat :: "node_id \<Rightarrow> nat" where
+  "node_id_to_nat (NodeId n) = n"
 
 
 (* --- Defines a fixed way to assign IDs to the special boundary nodes (inputs and outputs) --- *)
@@ -125,7 +125,7 @@ definition initial_nodes :: "nat \<Rightarrow> node_id \<Rightarrow> circuit_nod
   (* Id of InputNode is even, while that of OutputNode is odd *)
   (* If node_number \<ge> 2 * num_qubits, then it is unused in the initial circuit. Operation nodes will be added later. *)
   "initial_nodes number_of_qubits node_number = 
-    (let node_index = get_node_index node_number in
+    (let node_index = node_id_to_nat node_number in
       if node_index < 2 * number_of_qubits then
         if even node_index
         then Some (InputNode (Qubit (node_index div 2)))
@@ -287,13 +287,12 @@ definition are_well_formed_operation_nodes :: "quantum_circuit \<Rightarrow> boo
      )
   "
 
-
 (* ---- Validity check (Well-formedness check) for entire circuit begins ---- *)
 
 definition are_well_formed_boundary_nodes :: "quantum_circuit \<Rightarrow> bool" where
   (* Checks whether every valid qubit in the circuit has the correct canonical input and output nodes (boundary nodes) *)
 
-  (* Add checks to ensure that there are no invalid boundary nodes anywhere as well, meaning an input node like InputNode (Qubit 999) doesn't exist *)
+  (* TODO: Add checks to ensure that there are no invalid boundary nodes anywhere as well, meaning an input node like InputNode (Qubit 999) doesn't exist *)
   "are_well_formed_boundary_nodes circuit \<longleftrightarrow>
      (
         \<forall>qubit_number < num_qubits circuit.
@@ -303,7 +302,6 @@ definition are_well_formed_boundary_nodes :: "quantum_circuit \<Rightarrow> bool
             = Some (OutputNode (Qubit qubit_number))
      )
   "
-
 
 definition is_well_formed_circuit :: "quantum_circuit \<Rightarrow> bool" where
   (* A circuit is well-formed iff
@@ -318,8 +316,84 @@ definition is_well_formed_circuit :: "quantum_circuit \<Rightarrow> bool" where
   "
 
 
+lemma initial_edges_cases: (* helper lemma *)
+  (* Assuming that an edge e belongs to the initial circuit, this proof says that we can always find a qubit `qubit_number` such that the edge e is canonical input-to-output edge for that qubit. Meaning, edge e would always be from some InputNode(q0) to OutputNode(q0), where q0 is a valid qubit.
+  *)
+  assumes "e \<in> edges (initial_circuit number_of_qubits)"
+  obtains qubit_number where
+    "qubit_number < number_of_qubits"
+    "e = make_edge
+          (input_node_id (Qubit qubit_number))
+          (output_node_id (Qubit qubit_number))
+          (Qubit qubit_number)"
+  using assms
+  unfolding initial_circuit_def initial_edges_def
+  by auto
+
+
+lemma initial_circuit_has_no_operation_nodes:(* helper lemma *)
+  (* Proves that an initial circuit does not have any operation node  *)
+  "nodes (initial_circuit number_of_qubits) node_id \<noteq> Some (OperationNode op)"
+  unfolding initial_circuit_def initial_nodes_def
+  by (cases node_id; simp split: if_splits) 
+
+
+lemma initial_circuit_is_well_formed:
+  (* Proving that the initial empty circuit is a well-formed (valid) circuit *)
+  "is_well_formed_circuit (initial_circuit number_of_qubits)"
+
+proof -
+  have boundary: (*Prove that initial circuit has well formed boundary nodes *)
+    "are_well_formed_boundary_nodes (initial_circuit number_of_qubits)"
+    unfolding are_well_formed_boundary_nodes_def
+    by (simp add: initial_circuit_input_node initial_circuit_output_node)
+  
+  have edges:(* Prove that initial circuit has well formed edges *)
+  "are_well_formed_edges (initial_circuit number_of_qubits)"
+  proof -
+    show ?thesis
+      unfolding are_well_formed_edges_def
+    proof (intro ballI) (* Introduce a bounded universal proof *)
+      fix e (* Pick an arbitrary edge e, and prove the property for that edge *)
+      assume edge_in:
+        "e \<in> edges (initial_circuit number_of_qubits)"
+
+      from edge_in obtain qubit_number where
+      q_lt: "qubit_number < number_of_qubits"
+      and edge_eq:
+        "e =
+          make_edge
+            (input_node_id (Qubit qubit_number))
+            (output_node_id (Qubit qubit_number))
+            (Qubit qubit_number)"
+      by (blast elim: initial_edges_cases)
+
+    show "is_well_formed_edge (initial_circuit number_of_qubits) e"
+      unfolding is_well_formed_edge_def
+                node_exists_def
+                qubit_in_circuit_def
+      using q_lt edge_eq
+      by (simp add:
+            make_edge_def
+            initial_circuit_input_node
+            initial_circuit_output_node)
+    qed
+  qed
+
+  have op_nodes: (* Prove that initial circuit has well formed operation nodes. There are no operation nodes, so this will be a vacuous truth *)
+    "are_well_formed_operation_nodes (initial_circuit number_of_qubits)"
+    unfolding are_well_formed_operation_nodes_def
+    using initial_circuit_has_no_operation_nodes by simp
+
+  show ?thesis
+    unfolding is_well_formed_circuit_def
+    using boundary edges op_nodes
+    by simp
+qed
+
 (* ----- Validity check (Well-formedness check) for entire circuit ends ----- *)
 
+  
 (* Example definitions to demonstrate gate and operation *)
 
 definition ex_h_q0 :: operation where
