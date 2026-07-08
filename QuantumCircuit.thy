@@ -393,7 +393,27 @@ qed
 
 (* ----- Validity check (Well-formedness check) for entire circuit ends ----- *)
 
-  
+
+(* -------- Fresh node ID helpers begin -------- *)
+
+definition increment_node_id :: "node_id \<Rightarrow> node_id" where
+  (* Given a node ID, return the next node ID (Add 1 to it) *)
+  "increment_node_id current_node_id = NodeId (node_id_to_nat current_node_id + 1)"
+
+lemma node_id_to_nat_increment_node_id[simp]:
+  (* The next node id is 1 more than the present node id *)
+  "node_id_to_nat (increment_node_id current_node_id) = node_id_to_nat current_node_id + 1"
+  unfolding increment_node_id_def
+  by (cases current_node_id; simp)
+
+lemma increment_node_id_not_same[simp]:
+  (* Node id before and after increment are not same *)
+  "increment_node_id current_node_id \<noteq> current_node_id"
+  unfolding increment_node_id_def
+  by (cases current_node_id; simp)
+
+(* -------- Fresh node ID helpers end -------- *)
+
 (* Example definitions to demonstrate gate and operation *)
 
 definition ex_h_q0 :: operation where
