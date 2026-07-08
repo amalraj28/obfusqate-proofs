@@ -88,33 +88,33 @@ fun node_id_to_nat :: "node_id \<Rightarrow> nat" where
 
 (* If we have to move away from canonical numbering, just change these definitions *)
 
-definition input_node_id :: "qubit \<Rightarrow> node_id" where
-  "input_node_id q = NodeId (2 * get_qubit_index q)"
+definition get_input_node_id :: "qubit \<Rightarrow> node_id" where
+  "get_input_node_id q = NodeId (2 * get_qubit_index q)"
 
-definition output_node_id :: "qubit \<Rightarrow> node_id" where
-  "output_node_id q = NodeId (2 * get_qubit_index q + 1)"
+definition get_output_node_id :: "qubit \<Rightarrow> node_id" where
+  "get_output_node_id q = NodeId (2 * get_qubit_index q + 1)"
 
-definition first_operation_id :: "nat \<Rightarrow> node_id" where
-  "first_operation_id n = NodeId (2 * n)"
+definition get_first_operation_id :: "nat \<Rightarrow> node_id" where
+  "get_first_operation_id n = NodeId (2 * n)"
    (* can later on replace nat with quantum_circuit since it already has num_qubits as a parameter*)
 
 
 lemma input_output_ids_distinct[simp]: (* No input node ID is ever equal to an output node ID (even and odd numbers) *)
-  "input_node_id q \<noteq> output_node_id r"
-  unfolding input_node_id_def output_node_id_def
+  "get_input_node_id q \<noteq> get_output_node_id r"
+  unfolding get_input_node_id_def get_output_node_id_def
   apply (cases q; cases r; simp)
   by arith
 
 
 lemma input_node_id_injective: (* 2 different input nodes cannot have same node ID *)
-  "input_node_id q = input_node_id r \<Longrightarrow> q = r"
-  unfolding input_node_id_def
+  "get_input_node_id q = get_input_node_id r \<Longrightarrow> q = r"
+  unfolding get_input_node_id_def
   by (cases q; cases r; simp)
 
 
 lemma output_node_id_injective: (* 2 different output nodes cannot have same node ID *)
-  "output_node_id q = output_node_id r \<Longrightarrow> q = r"
-  unfolding output_node_id_def
+  "get_output_node_id q = get_output_node_id r \<Longrightarrow> q = r"
+  unfolding get_output_node_id_def
   by (cases q; cases r; simp)
 
 
@@ -140,8 +140,8 @@ definition initial_edges :: "nat \<Rightarrow> edge set" where
   "initial_edges number_of_qubits =
      {
         make_edge
-          (input_node_id (Qubit qubit_number))
-          (output_node_id (Qubit qubit_number))
+          (get_input_node_id (Qubit qubit_number))
+          (get_output_node_id (Qubit qubit_number))
           (Qubit qubit_number)
         | qubit_number. qubit_number < number_of_qubits
      }
@@ -154,7 +154,7 @@ definition initial_circuit :: "nat \<Rightarrow> quantum_circuit" where
      \<lparr> num_qubits = number_of_qubits,
        nodes = initial_nodes number_of_qubits,
        edges = initial_edges number_of_qubits,
-       next_id = first_operation_id number_of_qubits 
+       next_id = get_first_operation_id number_of_qubits 
      \<rparr>
   "
 
@@ -169,7 +169,7 @@ lemma initial_circuit_num_qubits[simp]:
 lemma initial_circuit_next_id[simp]:
   (* After initialization, the next available ID is the first operation-node ID. *)
   "next_id (initial_circuit number_of_qubits) =
-   first_operation_id number_of_qubits"
+   get_first_operation_id number_of_qubits"
   unfolding initial_circuit_def
   by simp
 
@@ -177,28 +177,28 @@ lemma initial_circuit_input_node:
   (* For any valid qubit number, the canonical input node ID stores the corresponding InputNode. *)
   assumes "qubit_number < number_of_qubits"
   shows "nodes (initial_circuit number_of_qubits)
-          (input_node_id (Qubit qubit_number))
+          (get_input_node_id (Qubit qubit_number))
         = Some (InputNode (Qubit qubit_number))" (* nodes is a record selector, meaning since it is defined inside the record, we have to pass the record itself as the first parameter *)
   using assms
-  unfolding initial_circuit_def initial_nodes_def input_node_id_def
+  unfolding initial_circuit_def initial_nodes_def get_input_node_id_def
   by simp
 
 lemma initial_circuit_output_node:
   (* For any valid qubit number, the canonical output node ID stores the corresponding OutputNode. *)
   assumes "qubit_number < number_of_qubits"
   shows "nodes (initial_circuit number_of_qubits)
-          (output_node_id (Qubit qubit_number))
+          (get_output_node_id (Qubit qubit_number))
         = Some (OutputNode (Qubit qubit_number))" (* nodes is a record selector, meaning since it is defined inside the record, we have to pass the record itself as the first parameter *)
   using assms
-  unfolding initial_circuit_def initial_nodes_def output_node_id_def
+  unfolding initial_circuit_def initial_nodes_def get_output_node_id_def
   by simp
 
 lemma initial_circuit_has_wire_edge:
   (* For any valid qubit number, the initial circuit contains the direct wire edge from input to output. *)
   assumes "qubit_number < number_of_qubits"
   shows "make_edge
-          (input_node_id (Qubit qubit_number))
-          (output_node_id (Qubit qubit_number))
+          (get_input_node_id (Qubit qubit_number))
+          (get_output_node_id (Qubit qubit_number))
           (Qubit qubit_number)
         \<in> edges (initial_circuit number_of_qubits)" (* edges is a record selector, meaning since it is defined inside the record, we have to pass the record itself as the first parameter *)
   using assms
@@ -296,9 +296,9 @@ definition are_well_formed_boundary_nodes :: "quantum_circuit \<Rightarrow> bool
   "are_well_formed_boundary_nodes circuit \<longleftrightarrow>
      (
         \<forall>qubit_number < num_qubits circuit.
-          nodes circuit (input_node_id (Qubit qubit_number))
+          nodes circuit (get_input_node_id (Qubit qubit_number))
             = Some (InputNode (Qubit qubit_number))
-        \<and> nodes circuit (output_node_id (Qubit qubit_number))
+        \<and> nodes circuit (get_output_node_id (Qubit qubit_number))
             = Some (OutputNode (Qubit qubit_number))
      )
   "
@@ -323,8 +323,8 @@ lemma initial_edges_cases: (* helper lemma *)
   obtains qubit_number where
     "qubit_number < number_of_qubits"
     "e = make_edge
-          (input_node_id (Qubit qubit_number))
-          (output_node_id (Qubit qubit_number))
+          (get_input_node_id (Qubit qubit_number))
+          (get_output_node_id (Qubit qubit_number))
           (Qubit qubit_number)"
   using assms
   unfolding initial_circuit_def initial_edges_def
@@ -363,8 +363,8 @@ proof -
       and edge_eq:
         "e =
           make_edge
-            (input_node_id (Qubit qubit_number))
-            (output_node_id (Qubit qubit_number))
+            (get_input_node_id (Qubit qubit_number))
+            (get_output_node_id (Qubit qubit_number))
             (Qubit qubit_number)"
       by (blast elim: initial_edges_cases)
 
@@ -413,6 +413,120 @@ lemma increment_node_id_not_same[simp]:
   by (cases current_node_id; simp)
 
 (* -------- Fresh node ID helpers end -------- *)
+
+
+(* -------- Graph update helpers begin -------- *)
+
+definition insert_node :: "node_id \<Rightarrow> circuit_node \<Rightarrow> quantum_circuit \<Rightarrow> quantum_circuit" where
+  (* Add or replace the node stored at the given node ID. *)
+  "insert_node node_id new_node circuit =
+     circuit\<lparr>nodes := (nodes circuit)(node_id := Some new_node)\<rparr>" (* create a new function exactly like "nodes circuit", except at "NodeId 2", return "Some new_node" *)
+
+definition insert_edge :: "edge \<Rightarrow> quantum_circuit \<Rightarrow> quantum_circuit" where
+  (* Add an edge to the circuit. *)
+  "insert_edge e circuit =
+     circuit\<lparr>edges := insert e (edges circuit)\<rparr>" (* Circuit where everything else is same, except that edges is now the union of old edge set with the new edge inserted *)
+
+definition delete_edge :: "edge \<Rightarrow> quantum_circuit \<Rightarrow> quantum_circuit" where
+  (* Remove an edge from the circuit. *)
+  "delete_edge e circuit =
+     circuit\<lparr>edges := edges circuit - {e}\<rparr>" (* Circuit where everything else is same, except that edges is the difference of old edges and set (new edge) *)
+
+
+lemma nodes_insert_node_same[simp]: (* helper lemma *)
+  (* After insertion, if you lookup at the inserted node id, you would get the new inserted node *)
+  "nodes (insert_node node_id node circuit) node_id = Some node"
+  unfolding insert_node_def
+  by simp
+
+lemma nodes_insert_node_other[simp]: (* helper lemma *)
+  (* All other node ids apart from the one where insertion happen, remain unchanged *)
+  assumes "other_node_id \<noteq> node_id"
+  shows "nodes (insert_node node_id node circuit) other_node_id =
+         nodes circuit other_node_id"
+  using assms
+  unfolding insert_node_def
+  by simp
+
+lemma edges_insert_edge[simp]: (* helper lemma *)
+  (* Edge set after insertion is just union of edge set prior to insertion and the newly added edge *)
+  "edges (insert_edge e circuit) = insert e (edges circuit)"
+  unfolding insert_edge_def
+  by simp
+
+lemma edges_delete_edge[simp]: (* helper lemma *)
+  (* Edge set after deletion is just difference of edge set prior to deletion and the deleted edge *)
+  "edges (delete_edge e circuit) = edges circuit - {e}"
+  unfolding delete_edge_def
+  by simp
+
+(* -------- Graph update helpers end -------- *)
+
+(* ---------------- Frontier definition begins ------------------ *)
+
+type_synonym frontier = "qubit \<Rightarrow> node_id" (* Frontier is a mapping from qubit \<Rightarrow> node_id, where node_id means the last operation encountered on this qubit *)
+
+definition initial_frontier :: "nat \<Rightarrow> frontier" where
+  (* Initially, frontier (map) would be from qubit to its input node (since circuit is empty) *)
+  "initial_frontier number_of_qubits q = get_input_node_id q"
+
+definition update_frontier :: "frontier \<Rightarrow> qubit \<Rightarrow> node_id \<Rightarrow> frontier" where
+  (* Updating frontier for a qubit q means that we are updating the existing entry of the qubit q in the map with the id of the new node *)
+  "update_frontier frontier q new_node_id = frontier(q := new_node_id)"
+
+(* ---------------- Frontier definition ends ------------------ *)
+
+definition splice_wire_without_updating_frontier ::
+  "quantum_circuit \<Rightarrow> frontier \<Rightarrow> qubit \<Rightarrow> node_id \<Rightarrow> quantum_circuit" where
+  (* Insert new_node_id on wire q between the current frontier node and the output node. Does not update frontier, for sake of simplicity *)
+  "splice_wire_without_updating_frontier circuit frontier q new_node_id =
+     (let old_node_id = frontier q;
+          out_node_id = get_output_node_id q;
+          old_edge = make_edge old_node_id out_node_id q;
+          new_in_edge = make_edge old_node_id new_node_id q;
+          new_out_edge = make_edge new_node_id out_node_id q
+      in
+        insert_edge new_out_edge
+          (insert_edge new_in_edge
+            (delete_edge old_edge circuit)))"
+
+
+definition splice_wire ::
+  "quantum_circuit \<Rightarrow> frontier \<Rightarrow> qubit \<Rightarrow> node_id \<Rightarrow> quantum_circuit \<times> frontier"
+where
+  (* Insert new_node_id on wire q and update the frontier for q in the same step. *)
+  "splice_wire circuit frontier q new_node_id = (
+         splice_wire_without_updating_frontier circuit frontier q new_node_id,
+         update_frontier frontier q new_node_id
+  )"
+
+lemma fst_splice_wire[simp]:
+  (* Says that the first part of splice_wire response is the updated circuit *)
+  "fst (splice_wire circuit frontier q new_node_id) =
+   splice_wire_without_updating_frontier circuit frontier q new_node_id"
+  unfolding splice_wire_def
+  by simp
+
+lemma snd_splice_wire[simp]:
+  (* Says that the second part of splice_wire response is the updated frontier map *)
+  "snd (splice_wire circuit frontier q new_node_id) =
+   update_frontier frontier q new_node_id"
+  unfolding splice_wire_def
+  by simp
+
+
+fun splice_wires ::
+  "quantum_circuit \<Rightarrow> frontier \<Rightarrow> qubit list \<Rightarrow> node_id \<Rightarrow>
+   quantum_circuit \<times> frontier" where
+  (* Allows inserting multi-qubit gates into the circuit, by recursively adding new edges for each concerned qubit *)
+  "splice_wires circuit frontier [] new_node_id = (circuit, frontier)"
+| "splice_wires circuit frontier (q # qs) new_node_id =
+      (
+        let (updated_circuit, updated_frontier) = 
+            splice_wire circuit frontier q new_node_id in
+                splice_wires updated_circuit updated_frontier qs new_node_id
+      )
+  "
 
 (* Example definitions to demonstrate gate and operation *)
 
