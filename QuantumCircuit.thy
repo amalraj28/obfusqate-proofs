@@ -466,9 +466,9 @@ lemma edges_delete_edge[simp]: (* helper lemma *)
 
 type_synonym frontier = "qubit \<Rightarrow> node_id" (* Frontier is a mapping from qubit \<Rightarrow> node_id, where node_id means the last operation encountered on this qubit *)
 
-definition initial_frontier :: "nat \<Rightarrow> frontier" where
+definition initial_frontier :: frontier where
   (* Initially, frontier (map) would be from qubit to its input node (since circuit is empty) *)
-  "initial_frontier number_of_qubits q = get_input_node_id q"
+  "initial_frontier q = get_input_node_id q"
 
 definition update_frontier :: "frontier \<Rightarrow> qubit \<Rightarrow> node_id \<Rightarrow> frontier" where
   (* Updating frontier for a qubit q means that we are updating the existing entry of the qubit q in the map with the id of the new node *)
