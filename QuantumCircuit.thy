@@ -476,6 +476,109 @@ definition update_frontier :: "frontier \<Rightarrow> qubit \<Rightarrow> node_i
 
 (* ---------------- Frontier definition ends ------------------ *)
 
+(* -------- Construction-state validity definitions begin -------- *)
+
+definition is_valid_frontier :: "quantum_circuit \<Rightarrow> frontier \<Rightarrow> bool" where
+  (* A frontier is valid when, for every valid qubit:
+       1. the frontier points to an existing node on that wire, and
+       2. that node is connected directly to the output node on that wire.
+  *)
+  "is_valid_frontier circuit frontier \<longleftrightarrow>
+     (\<forall>q.
+        qubit_in_circuit circuit q \<longrightarrow>
+        (\<exists>frontier_node.
+           nodes circuit (frontier q) = Some frontier_node
+         \<and> node_uses_qubit frontier_node q
+         \<and> make_edge
+             (frontier q)
+             (get_output_node_id q)
+             q
+           \<in> edges circuit))"
+
+
+definition next_id_is_unused :: "quantum_circuit \<Rightarrow> bool" where
+  (* The circuit's next_id is unused when no node is currently stored at that ID. This prevents the next insertion from overwriting an existing node *)
+  "next_id_is_unused circuit \<longleftrightarrow> nodes circuit (next_id circuit) = None"
+
+
+definition is_valid_construction_state :: "quantum_circuit \<Rightarrow> frontier \<Rightarrow> bool" where
+  (* A circuit and frontier form a valid construction state when:
+       1. the circuit is structurally well formed;
+       2. the frontier correctly describes the current end of every wire;
+       3. next_id is unused and can safely identify the next operation node.
+  *)
+  "is_valid_construction_state circuit frontier \<longleftrightarrow>
+       is_well_formed_circuit circuit
+     \<and> is_valid_frontier circuit frontier
+     \<and> next_id_is_unused circuit"
+
+(* -------- Construction-state validity definitions end -------- *)
+
+(* -------- Initial construction-state lemmas begin -------- *)
+
+lemma initial_frontier_is_valid:
+  (* The initial frontier correctly points from each qubit to its input boundary node. *)
+  "is_valid_frontier (initial_circuit number_of_qubits) initial_frontier"
+
+proof -
+  show ?thesis
+    unfolding is_valid_frontier_def
+  proof clarify
+    fix q
+    assume valid_q:
+      "qubit_in_circuit (initial_circuit number_of_qubits) q"
+
+    obtain qubit_number where
+      q_form: "q = Qubit qubit_number"
+      by (cases q)
+
+    from valid_q have q_lt:
+      "qubit_number < number_of_qubits"
+      unfolding qubit_in_circuit_def
+      using q_form
+      by simp
+
+    show
+      "\<exists>frontier_node.
+         nodes (initial_circuit number_of_qubits)
+           (initial_frontier q)
+           = Some frontier_node
+       \<and> node_uses_qubit frontier_node q
+       \<and> make_edge
+           (initial_frontier q)
+           (get_output_node_id q)
+           q
+         \<in> edges (initial_circuit number_of_qubits)"
+      using q_lt q_form
+      unfolding initial_frontier_def
+      by (intro exI[of _ "InputNode (Qubit qubit_number)"])
+         (simp add:
+            initial_circuit_input_node
+            initial_circuit_has_wire_edge)
+  qed
+qed
+
+lemma initial_next_id_is_unused:
+  (* The first operation-node ID is unused in the initial circuit. *)
+  "next_id_is_unused (initial_circuit number_of_qubits)"
+  unfolding next_id_is_unused_def
+            initial_circuit_def
+            initial_nodes_def
+            get_first_operation_id_def
+  by simp
+
+lemma initial_construction_state_is_valid:
+  (* The initial circuit together with the initial frontier forms a
+     valid starting state for repeated operation insertion. *)
+  "is_valid_construction_state (initial_circuit number_of_qubits) initial_frontier"
+  unfolding is_valid_construction_state_def
+  using initial_circuit_is_well_formed
+        initial_frontier_is_valid
+        initial_next_id_is_unused
+  by simp
+
+(* -------- Initial construction-state lemmas end -------- *)
+
 definition splice_wire_without_updating_frontier ::
   "quantum_circuit \<Rightarrow> frontier \<Rightarrow> qubit \<Rightarrow> node_id \<Rightarrow> quantum_circuit" where
   (* Insert new_node_id on wire q between the current frontier node and the output node. Does not update frontier, for sake of simplicity *)
@@ -527,6 +630,494 @@ fun splice_wires ::
                 splice_wires updated_circuit updated_frontier qs new_node_id
       )
   "
+
+lemma splice_wire_preserves_num_qubits[simp]:
+  (* Splicing a node into one wire changes only the circuit edges, so the number of qubits remains unchanged. *)
+  "num_qubits (fst (splice_wire circuit frontier q new_node_id)) = num_qubits circuit"
+
+  unfolding
+    splice_wire_def
+    splice_wire_without_updating_frontier_def
+    insert_edge_def
+    delete_edge_def
+ 
+  by (cases circuit; metis fst_conv quantum_circuit.select_convs(1) quantum_circuit.update_convs(3))
+
+
+(* ---------------- Operation insertion begins ---------------- *)
+
+definition insert_operation ::
+  "quantum_circuit \<Rightarrow> frontier \<Rightarrow> operation \<Rightarrow> quantum_circuit \<times> frontier"
+where
+  (* Insert an operation into the circuit:
+      1. Use next_id as the ID of the new OperationNode
+      2. Insert the OperationNode into the node table
+      3. Splice the new node into every qubit wire used by the operation
+      4. Advance next_id
+      5. Return the updated circuit and frontier
+  *)
+  "insert_operation circuit frontier op =
+     (let new_node_id = next_id circuit;
+
+          circuit_with_node =
+            insert_node new_node_id (OperationNode op) circuit;
+            \<comment>\<open>Insert the new operation node into the node table (nodes field of the quantum_circuit record) using the fresh node ID\<close>
+
+          spliced_result =
+            splice_wires
+              circuit_with_node
+              frontier
+              (op_qargs op)
+              new_node_id;
+            \<comment>\<open>Rewire every qubit used by the operation around the new node\<close>
+
+          spliced_circuit = fst spliced_result;
+          updated_frontier = snd spliced_result;
+            \<comment>\<open>Extract the rewired circuit and updated frontier map\<close>
+
+          final_circuit =
+            spliced_circuit
+              \<lparr>next_id := increment_node_id new_node_id\<rparr>
+            \<comment>\<open>Advance next_id to the next unused global node ID\<close>
+
+      in
+        (final_circuit, updated_frontier))"
+
+
+lemma insert_edge_preserves_nodes[simp]:
+  "nodes (insert_edge e circuit) node_id = nodes circuit node_id"
+  unfolding insert_edge_def
+  by simp
+
+lemma delete_edge_preserves_nodes[simp]:
+  "nodes (delete_edge e circuit) node_id = nodes circuit node_id"
+  unfolding delete_edge_def
+  by simp
+
+lemma splice_wire_without_updating_frontier_preserves_nodes[simp]:
+  "nodes
+     (splice_wire_without_updating_frontier
+        circuit frontier q new_node_id)
+     node_id
+   = nodes circuit node_id"
+proof -
+  let ?old_node_id = "frontier q" (* The node currently stored in the frontier for wire q. *)
+  let ?out_node_id = "get_output_node_id q"  (* The output boundary node of wire q. *)
+
+  let ?old_edge = "make_edge ?old_node_id ?out_node_id q" (* The edge currently connecting the frontier node directly to the output node. *)
+
+  let ?new_in_edge = "make_edge ?old_node_id new_node_id q" (* The new edge from the old frontier node to the inserted node. *)
+
+  let ?new_out_edge = "make_edge new_node_id ?out_node_id q" (* The new edge from the inserted node to the output node *)
+
+  have deleting_old_edge_preserves_nodes:
+    "nodes (delete_edge ?old_edge circuit) node_id = nodes circuit node_id" \<comment>\<open>Deleting "old_edge" from the circuit does not change the nodes field \<close>
+    unfolding delete_edge_def
+    by simp
+
+  have inserting_first_edge_preserves_nodes:
+    "nodes
+       (insert_edge ?new_in_edge
+          (delete_edge ?old_edge circuit))
+       node_id
+     =
+     nodes
+       (delete_edge ?old_edge circuit)
+       node_id"
+    \<comment>\<open>Inserting new_in_edge does not change the nodes field\<close>
+    unfolding insert_edge_def
+    by simp
+
+  have inserting_second_edge_preserves_nodes:
+    "nodes
+       (insert_edge ?new_out_edge
+          (insert_edge ?new_in_edge
+             (delete_edge ?old_edge circuit)))
+       node_id
+     =
+     nodes
+       (insert_edge ?new_in_edge
+          (delete_edge ?old_edge circuit))
+       node_id"
+    \<comment>\<open>Inserting new_out_edge does not change the nodes field\<close>
+    unfolding insert_edge_def
+    by simp
+
+  have final_circuit_preserves_nodes:
+    "nodes
+       (insert_edge
+          ?new_out_edge
+          (insert_edge
+             ?new_in_edge
+             (delete_edge ?old_edge circuit)))
+       node_id
+     = nodes circuit node_id" \<comment>\<open>Deleting old edge and inserting new edges from old node to new node, and new node to out node, keeps the nodes field of the circuit unchanged from the original circuit\<close>
+  proof -
+    have
+      "nodes
+         (insert_edge
+            ?new_out_edge
+            (insert_edge
+               ?new_in_edge
+               (delete_edge ?old_edge circuit)))
+       node_id
+       =
+       nodes
+         (insert_edge
+            ?new_in_edge
+            (delete_edge ?old_edge circuit))
+       node_id"  \<comment>\<open>Deleting old edge and inserting new edges from old node to new node, and new node to out node, keeps the nodes field of the circuit same as it was immediately before inserting the second new edge\<close>
+
+      using inserting_second_edge_preserves_nodes .
+
+    also have
+      "nodes
+         (insert_edge
+            ?new_in_edge
+            (delete_edge ?old_edge circuit))
+       node_id
+       =
+       nodes
+         (delete_edge ?old_edge circuit)
+       node_id" \<comment>\<open>Deleting old edge and inserting new edge from old node to new node keeps the nodes field of the circuit same as it was immediately before inserting the first new edge\<close>
+      using inserting_first_edge_preserves_nodes .
+
+    also have
+      "nodes
+         (delete_edge ?old_edge circuit)
+       node_id
+       =
+       nodes circuit node_id" \<comment>\<open>Deleting old edge keeps the nodes field of the circuit same as it was in the original circuit\<close>
+      using deleting_old_edge_preserves_nodes .
+
+    finally show ?thesis .
+  qed
+  
+  show ?thesis
+    unfolding splice_wire_without_updating_frontier_def
+    using final_circuit_preserves_nodes
+    by metis
+qed
+  
+
+lemma splice_wire_preserves_nodes[simp]:
+  "nodes
+     (fst (splice_wire circuit frontier q new_node_id))
+     node_id
+   = nodes circuit node_id"
+  unfolding splice_wire_def
+  by simp
+
+
+lemma splice_wires_preserve_nodes[simp]:
+  "nodes
+     (fst (splice_wires circuit frontier qs new_node_id))
+     node_id
+   = nodes circuit node_id"
+
+proof (induction qs arbitrary: circuit frontier) (* Prove using induction on qubit list, keeping circuit and frontier flexible *)
+
+  case Nil
+  then show ?case 
+    by simp
+
+next
+  case (Cons q qs) 
+    (* q is the first wire; 
+       qs is the remaining list;
+       Cons.IH is induction hypothesis for remaining wires
+    *)
+  obtain updated_circuit updated_frontier  \<comment>\<open>names for pair produced by splicing the first wire q\<close>
+    where splice_result:
+      "splice_wire circuit frontier q new_node_id = (updated_circuit, updated_frontier)"
+    by (cases "splice_wire circuit frontier q new_node_id")
+
+  have first_splice_preserves_node:
+    "nodes updated_circuit node_id = nodes circuit node_id" \<comment>\<open>The circuit returned after splicing the first wire q has the same node stored at node_id as the original circuit.\<close>
+
+  proof-
+    have "nodes (fst (splice_wire circuit frontier q new_node_id)) node_id = nodes circuit node_id" 
+      \<comment>\<open>A single call to splice_wire changes only edges and the frontier, so the nodes field remains unchanged.\<close>
+      by simp
+    then show ?thesis
+      using splice_result
+      by simp
+  qed
+
+  have remaining_splices_preserve_nodes:
+    "nodes (fst (splice_wires updated_circuit updated_frontier qs new_node_id)) node_id = nodes updated_circuit node_id"  \<comment>\<open>By the induction hypothesis, recursively splicing the remaining
+       wires qs preserves the nodes field of updated_circuit.\<close>
+    
+    using Cons.IH[of updated_circuit updated_frontier] (* Cons.IH means inductive hypothesis *)
+    by simp
+
+  show ?case
+    by (simp add: first_splice_preserves_node remaining_splices_preserve_nodes splice_result)
+qed
+
+
+lemma insert_operation_new_node:
+  (* After insertion, looking up the node whose ID was the old "next_id" returns the newly inserted node *)
+  "nodes (fst (insert_operation circuit frontier op))
+         (next_id circuit)
+   = Some (OperationNode op)"
+
+proof -
+  let ?new_node_id = "next_id circuit" 
+  (* The ID at which the new operation node will be stored. *)
+
+  let ?circuit_with_new_node = "insert_node ?new_node_id (OperationNode op) circuit"
+  (* The circuit after storing the new operation node, but before rewiring any qubit wires. *)
+
+  let ?spliced_result = "splice_wires ?circuit_with_new_node frontier (op_qargs op) ?new_node_id "
+    (* The pair containing the rewired circuit and updated frontier. *)
+
+  let ?spliced_circuit = "fst ?spliced_result"
+  (* The circuit component returned after all required wires are spliced. *)
+
+  let ?updated_frontier = "snd ?spliced_result"
+  (* The frontier component returned after all required wires are spliced. *)
+
+  let ?final_circuit = "?spliced_circuit \<lparr> next_id := increment_node_id ?new_node_id \<rparr>"
+  (* The final circuit returned by insert_operation, obtained by advancing next_id after rewiring *)
+
+  have node_exists_after_inserting:
+    "nodes ?circuit_with_new_node ?new_node_id = Some (OperationNode op)"
+    (* Immediately after insert_node, looking up the fresh node ID returns the newly inserted operation node. *)
+    unfolding insert_node_def
+    by simp
+
+  have node_exists_after_splicing:
+    "nodes ?spliced_circuit ?new_node_id = Some (OperationNode op)"
+    (* After rewiring the qubit wires, the newly inserted operation node is still stored at the fresh node ID. *)
+    using node_exists_after_inserting
+    by simp
+
+  have updating_next_id_preserves_nodes:
+    (* Updating next_id changes only the next_id field, so the new operation node remains stored at the fresh ID. *)
+    "nodes ?final_circuit ?new_node_id = Some (OperationNode op)"
+    using node_exists_after_splicing
+    by simp
+
+  have insert_operation_returns_final_circuit:
+    "fst (insert_operation circuit frontier op) = ?final_circuit"
+    (* The circuit returned by insert_operation is the final circuit constructed above. *)
+  proof -
+    obtain spliced_circuit updated_frontier where
+      spliced_result: "?spliced_result = (spliced_circuit, updated_frontier)"
+      by (cases ?spliced_result)
+        \<comment>\<open>Split the pair returned by splice_wires into its circuit and frontier components.\<close>
+
+    then show ?thesis
+      unfolding insert_operation_def
+      by simp
+  qed
+
+  show ?thesis
+    using insert_operation_returns_final_circuit
+    by simp
+qed
+
+lemma insert_operation_next_id[simp]:
+  (* After insertion, next_id of the new circuit is 1 more than the next_id of the circuit before insertion *)
+  "next_id (fst (insert_operation circuit frontier op)) =
+   increment_node_id (next_id circuit)"
+
+proof -
+  let ?new_node_id = "next_id circuit"
+  (* The ID at which the new operation node will be stored. *)
+
+  let ?circuit_with_new_node = "insert_node ?new_node_id (OperationNode op) circuit"
+  (* The circuit after storing the new operation node, but before rewiring any qubit wires. *)
+
+  let ?spliced_result = "splice_wires ?circuit_with_new_node frontier (op_qargs op) ?new_node_id"
+  (* The pair containing the rewired circuit and updated frontier. *)
+
+  obtain spliced_circuit updated_frontier where
+    spliced_result: "?spliced_result = (spliced_circuit, updated_frontier)"
+    by (cases ?spliced_result)
+      \<comment>\<open>Split the pair returned by splice_wires into its circuit and frontier components.\<close>
+
+  have returned_circuit:
+    "fst (insert_operation circuit frontier op) = 
+       spliced_circuit \<lparr> next_id := increment_node_id ?new_node_id \<rparr>"
+    (* New circuit returned by insert_operation is same as "spliced_circuit" whose next_id is the incremented node_id *)
+    using spliced_result
+    unfolding insert_operation_def
+    by simp
+
+  show ?thesis
+    using returned_circuit
+    by simp
+qed
+
+lemma insert_operation_num_qubits[simp]:
+  (* Inserting an operation does not change the number of qubits in the circuit. *)
+  "num_qubits (fst (insert_operation circuit frontier op)) =
+   num_qubits circuit"
+
+proof -
+  let ?new_node_id = "next_id circuit"
+  (* The ID at which the new operation node will be stored. *)
+
+  let ?circuit_with_new_node =
+    "insert_node ?new_node_id (OperationNode op) circuit"
+  (* The circuit after storing the new operation node,
+     but before rewiring any qubit wires. *)
+
+  let ?spliced_result =
+    "splice_wires
+       ?circuit_with_new_node
+       frontier
+       (op_qargs op)
+       ?new_node_id"
+  (* The pair containing the rewired circuit and updated frontier. *)
+
+  obtain spliced_circuit updated_frontier where
+    spliced_result:
+      "?spliced_result = (spliced_circuit, updated_frontier)"
+    by (cases ?spliced_result)
+    \<comment>\<open>Split the pair returned by splice_wires into its circuit and frontier components.\<close>
+
+  have inserting_node_preserves_num_qubits:
+    "num_qubits ?circuit_with_new_node = num_qubits circuit"
+    (* Inserting the new operation node changes only the nodes field,
+       so the number of qubits remains unchanged. *)
+    unfolding insert_node_def
+    by simp
+
+  have splicing_wires_preserves_num_qubits:
+    (* For any circuit, frontier, qubit list, and node ID,
+       splice_wires does not change the number of qubits. *)
+    "num_qubits
+       (fst
+         (splice_wires
+           current_circuit
+           current_frontier
+           qubits
+           node_id))
+     = num_qubits current_circuit"
+
+    for current_circuit current_frontier qubits node_id
+    \<comment>\<open>Make this a general local fact rather than restricting it to the current circuit and operation.\<close>
+
+  proof (induction qubits arbitrary: current_circuit current_frontier)
+    case Nil
+    (* If there are no wires to splice, splice_wires returns the original circuit. *)
+
+    then show ?case
+      by simp
+
+  next
+    case (Cons q qs)
+    (* For a nonempty wire list, first splice wire q,
+       then recursively splice the remaining wires qs. *)
+
+    obtain updated_circuit updated_frontier where
+      splice_result:
+        "splice_wire
+           current_circuit
+           current_frontier
+           q
+           node_id
+         =
+         (updated_circuit, updated_frontier)"
+      by (cases
+            "splice_wire
+               current_circuit
+               current_frontier
+               q
+               node_id")
+      \<comment>\<open>Split the result of the first wire splice into its updated circuit and frontier.\<close>
+
+    have recursive_splicing_preserves_num_qubits:
+      "num_qubits
+         (fst
+           (splice_wires
+             updated_circuit
+             updated_frontier
+             qs
+             node_id))
+       =
+       num_qubits updated_circuit"
+      (* By the induction hypothesis, splicing the remaining wires
+         does not change the qubit count of the updated circuit. *)
+      using Cons.IH
+      by simp
+
+    have first_splice_preserves_num_qubits:
+      "num_qubits updated_circuit =
+       num_qubits current_circuit"
+      (* Splicing the first wire changes only edges and the frontier,
+         so the number of qubits remains unchanged. *)
+      using
+        splice_result
+        splice_wire_preserves_num_qubits[
+          of current_circuit current_frontier q node_id]
+      by simp
+
+    show ?case
+      (* Combining the first splice with the recursive splicing step
+         shows that the entire splice_wires call preserves num_qubits. *)
+      using
+        splice_result
+        recursive_splicing_preserves_num_qubits
+        first_splice_preserves_num_qubits
+      by simp
+  qed
+
+  have spliced_circuit_preserves_num_qubits:
+    "num_qubits spliced_circuit =
+     num_qubits circuit"
+    (* The circuit obtained after inserting the node and splicing all
+       affected wires has the same number of qubits as the original circuit. *)
+  proof -
+    have
+      "num_qubits (fst ?spliced_result) =
+       num_qubits ?circuit_with_new_node"
+      (* Applying the general splice_wires preservation fact to the actual
+         qubit arguments of the inserted operation. *)
+      using
+        splicing_wires_preserves_num_qubits[
+          of ?circuit_with_new_node
+             frontier
+             "op_qargs op"
+             ?new_node_id]
+      by simp
+
+    also have
+      "num_qubits ?circuit_with_new_node =
+       num_qubits circuit"
+      (* The earlier node insertion did not change the qubit count. *)
+      using inserting_node_preserves_num_qubits .
+
+    finally show ?thesis
+      (* Replace fst ?spliced_result with the named spliced_circuit. *)
+      using spliced_result
+      by simp
+  qed
+
+  have returned_circuit:
+    "fst (insert_operation circuit frontier op) =
+       spliced_circuit
+         \<lparr>next_id := increment_node_id ?new_node_id\<rparr>"
+    (* insert_operation returns the rewired circuit with next_id advanced
+       to the next unused node ID. *)
+    using spliced_result
+    unfolding insert_operation_def
+    by simp
+
+  show ?thesis
+    (* Updating next_id changes only the next_id field,
+       so the final returned circuit has the same qubit count. *)
+    using
+      returned_circuit
+      spliced_circuit_preserves_num_qubits
+    by simp
+qed
+
+  
+(* ---------------- Operation insertion ends ---------------- *)
 
 (* Example definitions to demonstrate gate and operation *)
 
