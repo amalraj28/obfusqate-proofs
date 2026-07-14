@@ -205,6 +205,19 @@ lemma initial_circuit_has_wire_edge:
   unfolding initial_circuit_def initial_edges_def
   by auto
 
+lemma make_edges_on_different_wires_unequal:
+  (* Two edges carrying different qubit-wire labels cannot be equal,
+     regardless of their source and target node IDs. *)
+  assumes wires_different:
+    "first_wire \<noteq> second_wire"
+  shows
+    "make_edge first_source first_target first_wire
+     \<noteq>
+     make_edge second_source second_target second_wire"
+  using wires_different
+  unfolding make_edge_def
+  by simp
+
 (* ------- Basic properties' lemma completed ----------- *)
 
 
@@ -474,6 +487,23 @@ definition update_frontier :: "frontier \<Rightarrow> qubit \<Rightarrow> node_i
   (* Updating frontier for a qubit q means that we are updating the existing entry of the qubit q in the map with the id of the new node *)
   "update_frontier frontier q new_node_id = frontier(q := new_node_id)"
 
+lemma update_frontier_same[simp]:
+  (* If you look up qubit q after updating the frontier entry for q, you will get the newly supplied node ID *)
+  "update_frontier frontier q new_node_id q = new_node_id"
+  unfolding update_frontier_def
+  by simp
+
+lemma update_frontier_other[simp]:
+  (* Updating the frontier for q does not change the frontier entry
+     of any different qubit other_q. *)
+  assumes "other_q \<noteq> q"
+  shows
+    "update_frontier frontier q new_node_id other_q =
+     frontier other_q"
+  using assms
+  unfolding update_frontier_def
+  by simp
+
 (* ---------------- Frontier definition ends ------------------ *)
 
 (* -------- Construction-state validity definitions begin -------- *)
@@ -603,20 +633,303 @@ where
          update_frontier frontier q new_node_id
   )"
 
-lemma fst_splice_wire[simp]:
+lemma fst_splice_wire:
   (* Says that the first part of splice_wire response is the updated circuit *)
   "fst (splice_wire circuit frontier q new_node_id) =
    splice_wire_without_updating_frontier circuit frontier q new_node_id"
   unfolding splice_wire_def
   by simp
 
-lemma snd_splice_wire[simp]:
+lemma snd_splice_wire:
   (* Says that the second part of splice_wire response is the updated frontier map *)
   "snd (splice_wire circuit frontier q new_node_id) =
    update_frontier frontier q new_node_id"
   unfolding splice_wire_def
   by simp
 
+
+lemma edges_splice_wire_without_updating_frontier:
+  (* The edge set after splicing is obtained by removing the old edge
+     from the current frontier to the output node and inserting the two
+     new edges through the newly inserted operation node. *)
+  "edges
+      (splice_wire_without_updating_frontier
+          circuit frontier q new_node_id)
+   =
+   insert
+      (make_edge new_node_id (get_output_node_id q) q)
+      (insert
+          (make_edge (frontier q) new_node_id q)
+          (edges circuit -
+             {make_edge
+                (frontier q)
+                (get_output_node_id q)
+                q}))"
+  unfolding splice_wire_without_updating_frontier_def Let_def
+  by simp
+
+
+lemma splice_wire_contains_new_output_edge:
+  (* After splicing new_node_id into wire q, the resulting circuit
+     contains the new edge from new_node_id to the output node of q. *)
+  "make_edge
+      new_node_id
+      (get_output_node_id q)
+      q
+   \<in> edges
+       (splice_wire_without_updating_frontier
+          circuit frontier q new_node_id)"
+  unfolding splice_wire_without_updating_frontier_def Let_def
+  by simp
+
+lemma splice_wire_contains_new_input_edge:
+  (* After splicing new_node_id into wire q, the resulting circuit
+     contains the new edge from previous frontier node to new_node_id *)
+  "make_edge
+      (frontier q)
+      new_node_id
+      q
+   \<in> edges
+       (splice_wire_without_updating_frontier
+          circuit frontier q new_node_id)"
+  unfolding splice_wire_without_updating_frontier_def Let_def
+  by simp
+
+
+lemma splice_wire_preserves_output_edge_on_other_wire:
+  (* Splicing wire q does not remove the final frontier-to-output edge belonging to a different wire "other_q".
+
+     The only edge removed by the splice has wire label q. Since other_q and q are different, the other wire's edge cannot be the removed edge and therefore remains in the updated circuit.  *)
+  assumes different_wires:
+    "other_q \<noteq> q"
+
+  assumes old_output_edge_exists:
+    "make_edge
+       (frontier other_q)
+       (get_output_node_id other_q)
+       other_q
+     \<in> edges circuit"
+
+  shows
+    "make_edge
+       (frontier other_q)
+       (get_output_node_id other_q)
+       other_q
+     \<in> edges
+         (splice_wire_without_updating_frontier
+            circuit frontier q new_node_id)"
+
+  using assms
+  by (simp add: edges_splice_wire_without_updating_frontier make_edge_def)  
+
+
+lemma splice_wire_preserves_nodes[simp]:
+  (* Splicing a single wire only modifies the edge set and the frontier. The node table remains unchanged. *)
+  "nodes (fst (splice_wire circuit frontier q new_node_id)) node_id = nodes circuit node_id"
+  unfolding 
+    splice_wire_def
+    splice_wire_without_updating_frontier_def
+    insert_edge_def 
+    delete_edge_def
+    Let_def
+  by simp
+
+lemma splice_wire_without_updating_frontier_preserves_num_qubits[simp]:
+  (* Rewiring one qubit wire without updating the frontier changes only the circuit's edges field. The number of qubits remains unchanged. *)
+  "num_qubits 
+     (splice_wire_without_updating_frontier circuit frontier q new_node_id)
+   =
+   num_qubits circuit"
+  unfolding
+    splice_wire_without_updating_frontier_def
+    insert_edge_def
+    delete_edge_def
+    Let_def
+  by simp
+
+
+lemma splice_wire_preserves_num_qubits[simp]:
+  (* Splicing a single wire only modifies the edge set and the frontier. The number of qubits remain unchanged *)
+  "num_qubits (fst (splice_wire circuit frontier q new_node_id)) = num_qubits circuit"
+  unfolding splice_wire_def
+  by simp
+
+lemma splice_wire_preserves_valid_frontier:
+  (* Splicing an existing node into a valid qubit wire preserves the
+     frontier invariant, provided the inserted node belongs to that wire. *)
+  assumes valid_frontier:
+    "is_valid_frontier circuit frontier"
+
+  assumes new_node_exists:
+    "nodes circuit new_node_id = Some new_node"
+
+  assumes new_node_uses_wire:
+    "node_uses_qubit new_node q"
+
+  shows
+    "is_valid_frontier
+       (fst (splice_wire circuit frontier q new_node_id))
+       (snd (splice_wire circuit frontier q new_node_id))"
+
+proof -
+  let ?updated_circuit = "fst (splice_wire circuit frontier q new_node_id)"
+
+  let ?updated_frontier = "snd (splice_wire circuit frontier q new_node_id)"
+
+  show ?thesis
+    unfolding is_valid_frontier_def
+
+  proof (intro allI impI)
+    fix queried_wire
+
+    assume queried_wire_valid_after:
+      "qubit_in_circuit ?updated_circuit queried_wire"
+
+    show
+      "\<exists>frontier_node.
+         nodes ?updated_circuit (?updated_frontier queried_wire)
+           = Some frontier_node
+       \<and> node_uses_qubit frontier_node queried_wire
+       \<and> make_edge
+           (?updated_frontier queried_wire)
+           (get_output_node_id queried_wire)
+             queried_wire
+           \<in> edges ?updated_circuit"
+    proof (cases "queried_wire = q")
+      case True
+
+      have updated_frontier_lookup: 
+        "?updated_frontier queried_wire = new_node_id"
+        using True
+        by (simp add: snd_splice_wire)
+
+      have new_node_exists_after_splice:
+        (* splice_wire changes only edges and the frontier. Therefore, the node stored at new_node_id remains new_node *)
+        "nodes ?updated_circuit new_node_id = Some new_node"
+        unfolding
+          splice_wire_def
+          splice_wire_without_updating_frontier_def
+          Let_def
+          insert_edge_def
+          delete_edge_def
+        using new_node_exists
+        by simp
+
+      have new_node_uses_queried_wire:
+        (* The inserted node uses q by assumption, and queried_wire = q in this branch. *)
+        "node_uses_qubit new_node queried_wire"
+        using new_node_uses_wire True
+        by simp
+
+      have new_output_edge_exists:
+        (* The splice inserts the final edge from new_node_id to the output node of q. Since queried_wire = q, this is exactly the frontier edge required for queried_wire. *)
+        "make_edge
+           new_node_id
+           (get_output_node_id queried_wire)
+           queried_wire
+         \<in> edges ?updated_circuit"
+        unfolding
+          splice_wire_def
+          splice_wire_without_updating_frontier_def
+          Let_def
+          insert_edge_def
+          delete_edge_def
+        using True
+             (* splice_wire_contains_new_input_edge[
+                where circuit = circuit
+                  and frontier = frontier
+                  and q = q
+                  and new_node_id = new_node_id] ---> This commented block is not needed (error)*)
+        by simp
+      show ?thesis
+        (* Choose new_node as the witness for the existential statement. *)
+        using 
+          updated_frontier_lookup
+          new_node_exists_after_splice
+          new_node_uses_queried_wire
+          new_output_edge_exists
+        by (intro exI[of _ new_node]) simp
+
+    next
+      case False
+      have updated_frontier_unchanged:
+        (* Only the frontier entry for q was updated. Because queried_wire is different from q, its frontier entry remains exactly as it was before the splice. *)
+        "?updated_frontier queried_wire = frontier queried_wire"
+        using False
+        by (simp add: snd_splice_wire)
+
+      have queried_wire_valid_before:
+        (* The queried wire was valid before the splice because splice_wire preserves the circuit's number of qubits. *)
+        "qubit_in_circuit circuit queried_wire"
+        using queried_wire_valid_after
+        unfolding qubit_in_circuit_def
+        by simp
+
+      obtain old_frontier_node where
+        old_frontier_node_exists:
+          "nodes circuit (frontier queried_wire) = Some old_frontier_node"
+        and old_frontier_node_uses_wire:
+          "node_uses_qubit old_frontier_node queried_wire"
+        and old_output_edge_exists:
+          "make_edge
+             (frontier queried_wire)
+             (get_output_node_id queried_wire)
+             queried_wire
+           \<in> edges circuit"
+      using valid_frontier queried_wire_valid_before
+      unfolding is_valid_frontier_def
+      by blast
+
+      have old_edge_is_not_deleted_edge:
+        (* The old frontier edge belongs to queried_wire, while the
+           deleted edge belongs to q. Since the wires are different,
+           the two edge records cannot be equal *)
+        "make_edge
+           (frontier queried_wire)
+           (get_output_node_id queried_wire)
+           queried_wire
+         \<noteq>
+         make_edge
+           (frontier q)
+           (get_output_node_id q)
+           q"
+        using False
+        unfolding make_edge_def
+        by simp
+
+      have old_output_edge_still_exists:
+        (* The splice removes only the old edge on q. Since the frontier
+           edge of queried_wire is different, it remains in the edge set.
+           The two newly inserted edges do not remove any existing edge. *)
+        "make_edge
+           (frontier queried_wire)
+           (get_output_node_id queried_wire)
+           queried_wire
+         \<in> edges ?updated_circuit"
+        using
+          old_output_edge_exists
+          old_edge_is_not_deleted_edge
+        by (simp add: fst_splice_wire edges_splice_wire_without_updating_frontier)
+
+      have old_frontier_node_still_exists:
+        (* splice_wire modifies edges and the frontier, but does not modify the circuit's nodes field. *)
+        "nodes ?updated_circuit (frontier queried_wire) = Some old_frontier_node"
+        using old_frontier_node_exists
+        by simp
+
+      show ?thesis
+        (* For an unaffected wire, reuse its original frontier node.
+           Its frontier lookup, stored node, wire membership, and final
+           output edge all remain valid after the splice. *)
+        using
+          updated_frontier_unchanged
+          old_frontier_node_still_exists
+          old_frontier_node_uses_wire
+          old_output_edge_still_exists
+        by (intro exI[of _ old_frontier_node]) simp
+    qed
+  qed
+qed
 
 fun splice_wires ::
   "quantum_circuit \<Rightarrow> frontier \<Rightarrow> qubit list \<Rightarrow> node_id \<Rightarrow>
@@ -630,19 +943,6 @@ fun splice_wires ::
                 splice_wires updated_circuit updated_frontier qs new_node_id
       )
   "
-
-lemma splice_wire_preserves_num_qubits[simp]:
-  (* Splicing a node into one wire changes only the circuit edges, so the number of qubits remains unchanged. *)
-  "num_qubits (fst (splice_wire circuit frontier q new_node_id)) = num_qubits circuit"
-
-  unfolding
-    splice_wire_def
-    splice_wire_without_updating_frontier_def
-    insert_edge_def
-    delete_edge_def
- 
-  by (cases circuit; metis fst_conv quantum_circuit.select_convs(1) quantum_circuit.update_convs(3))
-
 
 (* ---------------- Operation insertion begins ---------------- *)
 
@@ -684,130 +984,6 @@ where
         (final_circuit, updated_frontier))"
 
 
-lemma insert_edge_preserves_nodes[simp]:
-  "nodes (insert_edge e circuit) node_id = nodes circuit node_id"
-  unfolding insert_edge_def
-  by simp
-
-lemma delete_edge_preserves_nodes[simp]:
-  "nodes (delete_edge e circuit) node_id = nodes circuit node_id"
-  unfolding delete_edge_def
-  by simp
-
-lemma splice_wire_without_updating_frontier_preserves_nodes[simp]:
-  "nodes
-     (splice_wire_without_updating_frontier
-        circuit frontier q new_node_id)
-     node_id
-   = nodes circuit node_id"
-proof -
-  let ?old_node_id = "frontier q" (* The node currently stored in the frontier for wire q. *)
-  let ?out_node_id = "get_output_node_id q"  (* The output boundary node of wire q. *)
-
-  let ?old_edge = "make_edge ?old_node_id ?out_node_id q" (* The edge currently connecting the frontier node directly to the output node. *)
-
-  let ?new_in_edge = "make_edge ?old_node_id new_node_id q" (* The new edge from the old frontier node to the inserted node. *)
-
-  let ?new_out_edge = "make_edge new_node_id ?out_node_id q" (* The new edge from the inserted node to the output node *)
-
-  have deleting_old_edge_preserves_nodes:
-    "nodes (delete_edge ?old_edge circuit) node_id = nodes circuit node_id" \<comment>\<open>Deleting "old_edge" from the circuit does not change the nodes field \<close>
-    unfolding delete_edge_def
-    by simp
-
-  have inserting_first_edge_preserves_nodes:
-    "nodes
-       (insert_edge ?new_in_edge
-          (delete_edge ?old_edge circuit))
-       node_id
-     =
-     nodes
-       (delete_edge ?old_edge circuit)
-       node_id"
-    \<comment>\<open>Inserting new_in_edge does not change the nodes field\<close>
-    unfolding insert_edge_def
-    by simp
-
-  have inserting_second_edge_preserves_nodes:
-    "nodes
-       (insert_edge ?new_out_edge
-          (insert_edge ?new_in_edge
-             (delete_edge ?old_edge circuit)))
-       node_id
-     =
-     nodes
-       (insert_edge ?new_in_edge
-          (delete_edge ?old_edge circuit))
-       node_id"
-    \<comment>\<open>Inserting new_out_edge does not change the nodes field\<close>
-    unfolding insert_edge_def
-    by simp
-
-  have final_circuit_preserves_nodes:
-    "nodes
-       (insert_edge
-          ?new_out_edge
-          (insert_edge
-             ?new_in_edge
-             (delete_edge ?old_edge circuit)))
-       node_id
-     = nodes circuit node_id" \<comment>\<open>Deleting old edge and inserting new edges from old node to new node, and new node to out node, keeps the nodes field of the circuit unchanged from the original circuit\<close>
-  proof -
-    have
-      "nodes
-         (insert_edge
-            ?new_out_edge
-            (insert_edge
-               ?new_in_edge
-               (delete_edge ?old_edge circuit)))
-       node_id
-       =
-       nodes
-         (insert_edge
-            ?new_in_edge
-            (delete_edge ?old_edge circuit))
-       node_id"  \<comment>\<open>Deleting old edge and inserting new edges from old node to new node, and new node to out node, keeps the nodes field of the circuit same as it was immediately before inserting the second new edge\<close>
-
-      using inserting_second_edge_preserves_nodes .
-
-    also have
-      "nodes
-         (insert_edge
-            ?new_in_edge
-            (delete_edge ?old_edge circuit))
-       node_id
-       =
-       nodes
-         (delete_edge ?old_edge circuit)
-       node_id" \<comment>\<open>Deleting old edge and inserting new edge from old node to new node keeps the nodes field of the circuit same as it was immediately before inserting the first new edge\<close>
-      using inserting_first_edge_preserves_nodes .
-
-    also have
-      "nodes
-         (delete_edge ?old_edge circuit)
-       node_id
-       =
-       nodes circuit node_id" \<comment>\<open>Deleting old edge keeps the nodes field of the circuit same as it was in the original circuit\<close>
-      using deleting_old_edge_preserves_nodes .
-
-    finally show ?thesis .
-  qed
-  
-  show ?thesis
-    unfolding splice_wire_without_updating_frontier_def
-    using final_circuit_preserves_nodes
-    by metis
-qed
-  
-
-lemma splice_wire_preserves_nodes[simp]:
-  "nodes
-     (fst (splice_wire circuit frontier q new_node_id))
-     node_id
-   = nodes circuit node_id"
-  unfolding splice_wire_def
-  by simp
-
 
 lemma splice_wires_preserve_nodes[simp]:
   "nodes
@@ -838,6 +1014,12 @@ next
   proof-
     have "nodes (fst (splice_wire circuit frontier q new_node_id)) node_id = nodes circuit node_id" 
       \<comment>\<open>A single call to splice_wire changes only edges and the frontier, so the nodes field remains unchanged.\<close>
+      unfolding
+        splice_wire_def
+        splice_wire_without_updating_frontier_def
+        Let_def
+        insert_edge_def
+        delete_edge_def
       by simp
     then show ?thesis
       using splice_result
