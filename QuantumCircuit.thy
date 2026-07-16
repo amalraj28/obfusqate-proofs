@@ -207,7 +207,6 @@ lemma make_edges_on_different_wires_unequal:
 
 (* ------- Basic properties' lemma completed ----------- *)
 
-
 (* ----------- Simple query helpers ----------- *)
 definition node_exists :: "quantum_circuit \<Rightarrow> node_id \<Rightarrow> bool" where
   (* Checks whether a node Id exists in the given quantum circuit *)
@@ -260,6 +259,33 @@ definition are_well_formed_edges :: "quantum_circuit \<Rightarrow> bool" where
      (\<forall>e \<in> edges circuit. is_well_formed_edge circuit e
      )
   "
+
+definition edge_relation :: "quantum_circuit \<Rightarrow> (node_id \<times> node_id) set" where
+  (* Convert the circuit's wire-labelled edges into an ordinary
+     directed relation between node IDs.
+
+     A pair (source_id, target_id) belongs to this relation exactly
+     when the circuit contains at least one edge whose source and
+     target are those node IDs.
+
+     The qubit label is intentionally ignored here because acyclicity
+     concerns directed reachability between graph vertices, regardless
+     of which wire carries each edge.
+  *)
+  "edge_relation circuit =
+     {(source_id, target_id).
+        \<exists>e \<in> edges circuit.
+          edge_source e = source_id
+        \<and> edge_target e = target_id}"
+
+definition is_acyclic_circuit :: "quantum_circuit \<Rightarrow> bool" where
+  (* A circuit is acyclic when its directed node relation contains
+     no directed cycle.
+
+     Equivalently, no node can be reached again by repeatedly following
+     one or more directed circuit edges from itself.
+  *)
+  "is_acyclic_circuit circuit \<longleftrightarrow> acyclic (edge_relation circuit)"
 
 (* -------- Edge well-formedness definitions end --------- *)
 
@@ -327,6 +353,81 @@ lemma initial_edges_cases: (* helper lemma *)
   unfolding initial_circuit_def initial_edges_def
   by auto
 
+lemma initial_edge_relation_cases:
+  (* Every source-target pair in the initial circuit relation comes
+     from one canonical input-to-output edge of a valid qubit. *)
+  assumes relation_pair:
+    "(source_id, target_id) \<in> edge_relation (initial_circuit number_of_qubits)"
+
+  obtains qubit_number where
+    "qubit_number < number_of_qubits"
+    "source_id = get_input_node_id (Qubit qubit_number)"
+    "target_id = get_output_node_id (Qubit qubit_number)"
+
+proof - 
+  from relation_pair obtain e where
+    edge_in: "e \<in> edges (initial_circuit number_of_qubits)"
+    and source_eq: "edge_source e = source_id"
+    and target_eq: "edge_target e = target_id"
+    unfolding edge_relation_def
+    by auto
+
+  from edge_in obtain qubit_number where
+    qubit_valid: "qubit_number < number_of_qubits"
+    and edge_eq:
+      "e =
+        make_edge
+          (get_input_node_id (Qubit qubit_number))
+          (get_output_node_id (Qubit qubit_number))
+          (Qubit qubit_number)"
+    by (elim initial_edges_cases)
+
+  show thesis
+    using that[of qubit_number]
+          qubit_valid
+          source_eq
+          target_eq
+          edge_eq
+    unfolding make_edge_def
+    by simp
+qed
+
+lemma initial_edge_relation_cannot_compose:
+  (* Two edges of the initial circuit relation cannot be composed.
+
+     The target of every initial edge is an output node ID, while the
+     source of every initial edge is an input node ID. No output node ID
+     can equal any input node ID.
+  *)
+  assumes first_edge:
+    "(first_source, middle_node)
+       \<in> edge_relation (initial_circuit number_of_qubits)"
+
+  assumes second_edge:
+    "(middle_node, second_target)
+       \<in> edge_relation (initial_circuit number_of_qubits)"
+
+  shows False
+
+proof -
+  from first_edge obtain first_qubit where
+    first_target:
+      "middle_node =
+       get_output_node_id (Qubit first_qubit)"
+    by (elim initial_edge_relation_cases)
+
+  from second_edge obtain second_qubit where
+    second_source:
+      "middle_node =
+       get_input_node_id (Qubit second_qubit)"
+    by (elim initial_edge_relation_cases)
+
+  from first_target second_source show False
+    using input_output_ids_distinct[
+      of "Qubit second_qubit" "Qubit first_qubit"]
+    by simp
+qed
+
 lemma initial_circuit_has_no_operation_nodes:(* helper lemma *)
   (* Proves that an initial circuit does not have any operation node  *)
   "nodes (initial_circuit number_of_qubits) node_id \<noteq> Some (OperationNode op)"
@@ -386,10 +487,107 @@ proof -
     by simp
 qed
 
+lemma initial_circuit_is_acyclic:
+  (* The initial circuit is acyclic because every edge goes directly
+     from an input boundary node to an output boundary node, and output
+     nodes have no outgoing edges. *)
+  "is_acyclic_circuit (initial_circuit number_of_qubits)"
+
+proof -
+  show ?thesis
+    unfolding is_acyclic_circuit_def acyclic_def
+
+  proof (intro allI notI)
+    fix node_id
+
+    assume cycle:
+      "(node_id, node_id)
+       \<in> (edge_relation
+            (initial_circuit number_of_qubits))\<^sup>+"
+
+    from cycle show False
+    proof (induction rule: trancl_induct)
+      have initial_path_is_single_edge:
+        "\<And>source_id target_id.
+           (source_id, target_id)
+             \<in> (edge_relation
+                  (initial_circuit number_of_qubits))\<^sup>+
+           \<Longrightarrow>
+           (source_id, target_id)
+             \<in> edge_relation
+                  (initial_circuit number_of_qubits)"
+      proof - 
+        fix source_id target_id
+
+        assume path: 
+          "(source_id, target_id)
+           \<in> (edge_relation
+                (initial_circuit number_of_qubits))\<^sup>+"
+
+      from path show
+        "(source_id, target_id)
+           \<in> edge_relation
+                (initial_circuit number_of_qubits)"
+      proof (induction rule: trancl_induct)
+        case (base intermediate_id)
+
+        then show ?case
+          by assumption
+
+      next
+        case (step intermediate_id final_id)
+
+        have first_edge:
+          "(source_id, intermediate_id)
+             \<in> edge_relation
+                  (initial_circuit number_of_qubits)"
+          using step.IH .
+
+        have second_edge:
+          "(intermediate_id, final_id)
+             \<in> edge_relation
+                  (initial_circuit number_of_qubits)"
+          using step.hyps(2) .
+
+        have False
+          using
+            initial_edge_relation_cannot_compose[
+              OF first_edge second_edge]
+          .
+        then show ?case
+          by simp
+      qed
+    qed
+
+    have direct_self_edge:
+      "(node_id, node_id)
+         \<in> edge_relation
+              (initial_circuit number_of_qubits)"
+      using initial_path_is_single_edge cycle
+      by simp
+
+    from direct_self_edge obtain qubit_number where
+      node_is_input:
+        "node_id =
+           get_input_node_id (Qubit qubit_number)"
+      and node_is_output:
+        "node_id =
+           get_output_node_id (Qubit qubit_number)"
+      by (elim initial_edge_relation_cases)
+
+    from node_is_input node_is_output show False
+      using input_output_ids_distinct[
+        of "Qubit qubit_number" "Qubit qubit_number"]
+      by simp
+  qed
+qed
+qed
+      
 (* ----- Validity check (Well-formedness check) for entire circuit ends ----- *)
 
 
 (* -------- Fresh node ID helpers begin -------- *)
+
 
 definition increment_node_id :: "node_id \<Rightarrow> node_id" where
   (* Given a node ID, return the next node ID (Add 1 to it) *)
@@ -496,7 +694,6 @@ definition is_valid_construction_state :: "quantum_circuit \<Rightarrow> frontie
         \<and> all_existing_node_ids_below_next_id circuit"
   
 (* -------- Construction-state validity definitions end -------- *)
-
 
 (* -------- Graph update helpers begin -------- *)
 
@@ -716,7 +913,6 @@ proof -
   qed
 qed
 
-
 lemma initial_next_id_is_unused:
   (* The first operation-node ID is unused in the initial circuit. *)
   "next_id_is_unused (initial_circuit number_of_qubits)"
@@ -725,7 +921,6 @@ lemma initial_next_id_is_unused:
             initial_nodes_def
             get_first_operation_id_def
   by simp
-
 
 lemma initial_existing_node_ids_are_below_next_id:
   (* Every node stored in the initial circuit is a boundary node whose
@@ -770,7 +965,6 @@ where
          update_frontier frontier q new_node_id
   )"
 
-
 lemma fst_splice_wire:
   (* Says that the first part of splice_wire response is the updated circuit *)
   "fst (splice_wire circuit frontier q new_node_id) =
@@ -778,15 +972,12 @@ lemma fst_splice_wire:
   unfolding splice_wire_def
   by simp
 
-
 lemma snd_splice_wire:
   (* Says that the second part of splice_wire response is the updated frontier map *)
   "snd (splice_wire circuit frontier q new_node_id) =
    update_frontier frontier q new_node_id"
   unfolding splice_wire_def
   by simp
-
-
 
 lemma edges_splice_wire_without_updating_frontier:
   (* The edge set after splicing is obtained by removing the old edge
@@ -808,8 +999,6 @@ lemma edges_splice_wire_without_updating_frontier:
   unfolding splice_wire_without_updating_frontier_def Let_def
   by simp
 
-
-
 lemma splice_wire_contains_new_output_edge:
   (* After splicing new_node_id into wire q, the resulting circuit
      contains the new edge from new_node_id to the output node of q. *)
@@ -823,7 +1012,6 @@ lemma splice_wire_contains_new_output_edge:
   unfolding splice_wire_without_updating_frontier_def Let_def
   by simp
 
-
 lemma splice_wire_contains_new_input_edge:
   (* After splicing new_node_id into wire q, the resulting circuit
      contains the new edge from previous frontier node to new_node_id *)
@@ -836,8 +1024,6 @@ lemma splice_wire_contains_new_input_edge:
           circuit frontier q new_node_id)"
   unfolding splice_wire_without_updating_frontier_def Let_def
   by simp
-
-
 
 lemma splice_wire_preserves_output_edge_on_other_wire:
   (* Splicing wire q does not remove the final frontier-to-output edge belonging to a different wire "other_q".
@@ -864,8 +1050,6 @@ lemma splice_wire_preserves_output_edge_on_other_wire:
 
   using assms
   by (simp add: edges_splice_wire_without_updating_frontier make_edge_def)  
-
-
 
 lemma splice_wire_preserves_nodes[simp]:
   (* Splicing a single wire only modifies the edge set and the frontier. The node table remains unchanged. *)
@@ -1881,7 +2065,6 @@ proof -
   qed
 qed
 
-
 lemma insert_operation_num_qubits[simp]:
   (* Inserting an operation does not change the number of qubits in the circuit. *)
   "num_qubits (fst (insert_operation circuit frontier op)) =
@@ -2708,9 +2891,77 @@ proof -
     by simp
 qed
 
-(* ---------------- Operation insertion ends ---------------- *)
+lemma insert_operation_preserves_valid_construction_state:
+  (* Inserting an operation that is valid for the current circuit
+     preserves the complete construction-state invariant.
 
-(* Example definitions to demonstrate gate and operation *)
+     The original construction-state assumption supplies:
+       1. circuit well-formedness;
+       2. frontier validity;
+       3. an unused next_id;
+       4. sequential node-ID allocation.
+
+     The insertion-preservation theorems already proved establish that
+     the returned circuit and frontier satisfy these properties again.
+     Therefore, another valid operation may safely be inserted into the
+     returned construction state.
+  *)
+
+  assumes valid_state:
+    "is_valid_construction_state circuit frontier"
+
+  assumes valid_operation:
+    "operation_in_circuit circuit op"
+  
+  shows
+    "is_valid_construction_state
+        (fst (insert_operation circuit frontier op))
+        (snd (insert_operation circuit frontier op))"
+  
+proof -
+  let ?updated_circuit = "fst (insert_operation circuit frontier op)"
+  let ?updated_frontier = "snd (insert_operation circuit frontier op)"
+
+  have updated_circuit_is_well_formed:
+    "is_well_formed_circuit ?updated_circuit"
+    using insert_operation_preserves_well_formed_circuit
+          is_valid_construction_state_def valid_operation
+          valid_state
+    by simp 
+
+  have updated_frontier_is_valid:
+    "is_valid_frontier ?updated_circuit ?updated_frontier"
+    using insert_operation_preserves_valid_frontier
+          is_valid_construction_state_def
+          operation_in_circuit_def
+          valid_operation valid_state
+    by simp
+
+  have all_existing_node_ids_of_updated_circuit_are_below_next_id:
+    "all_existing_node_ids_below_next_id ?updated_circuit"
+    using insert_operation_preserves_node_id_allocation
+          is_valid_construction_state_def
+          valid_state
+    by simp
+
+  have next_id_of_updated_circuit_is_unused:
+    "next_id_is_unused ?updated_circuit"
+    using all_existing_node_ids_below_next_id_def
+          all_existing_node_ids_of_updated_circuit_are_below_next_id
+          next_id_is_unused_def
+    by auto
+
+  show ?thesis
+    using
+      updated_circuit_is_well_formed
+      updated_frontier_is_valid
+      next_id_of_updated_circuit_is_unused
+      all_existing_node_ids_of_updated_circuit_are_below_next_id
+    unfolding is_valid_construction_state_def
+    by simp
+qed
+    
+(* ---------------- Operation insertion ends ---------------- *)
 
 lemma initial_construction_state_is_valid:
   (* The initial circuit together with the initial frontier forms a
@@ -2725,6 +2976,7 @@ lemma initial_construction_state_is_valid:
   unfolding is_valid_construction_state_def
   by simp
 
+(* Example definitions to demonstrate gate and operation *)
 
 definition ex_h_q0 :: operation where
   "ex_h_q0 = \<lparr>op_gate = Gate_H, op_qargs = [Qubit 0]\<rparr>"
