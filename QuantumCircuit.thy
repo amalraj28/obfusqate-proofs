@@ -3185,32 +3185,32 @@ lemma splice_wires_preserve_valid_frontier:
   assumes valid_frontier:
     "is_valid_frontier circuit frontier"
 
-  assumes new_node_exists:
-    "nodes circuit new_node_id = Some new_node"
+assumes new_node_exists:
+  "nodes circuit new_node_id = Some new_node"
 
-  assumes new_node_uses_all_wires:
-    "\<forall>q \<in> set qs. node_uses_qubit new_node q"
-  
-  assumes distinct_wires:
-    (* Each wire is spliced at most once. *)
-    "distinct qs"
-  
-  assumes new_node_not_frontiers:
-    (* The inserted node is different from the existing frontier node on
+assumes new_node_uses_all_wires:
+  "\<forall>q \<in> set qs. node_uses_qubit new_node q"
+
+assumes distinct_wires:
+  (* Each wire is spliced at most once. *)
+  "distinct qs"
+
+assumes new_node_not_frontiers:
+  (* The inserted node is different from the existing frontier node on
          every wire that will be spliced. *)
-    "\<forall>q \<in> set qs. new_node_id \<noteq> frontier q"
-  
-  assumes new_node_has_no_other_successors:
-    (* Before splicing starts, the inserted node has no conflicting
+  "\<forall>q \<in> set qs. new_node_id \<noteq> frontier q"
+
+assumes new_node_has_no_other_successors:
+  (* Before splicing starts, the inserted node has no conflicting
          successor on any affected wire. *)
-    "\<forall>q \<in> set qs.
+  "\<forall>q \<in> set qs.
          (\<forall>successor_id.
             (new_node_id, successor_id)
               \<in> wire_edge_relation circuit q
             \<longrightarrow> successor_id = get_output_node_id q)"
-  
-  shows
-    "is_valid_frontier \<comment>\<open>The final frontier correctly describes the final circuit\<close>
+
+shows
+  "is_valid_frontier \<comment>\<open>The final frontier correctly describes the final circuit\<close>
          (fst (splice_wires circuit frontier qs new_node_id))
          (snd (splice_wires circuit frontier qs new_node_id))"
 
@@ -3258,26 +3258,26 @@ next
     (* Splicing the first wire produces a circuit and frontier that still satisfy the valid-frontier invariant. *)
     "is_valid_frontier updated_circuit updated_frontier"
 
-    proof -
-      have
-        "is_valid_frontier
+  proof -
+    have
+      "is_valid_frontier
          (fst (splice_wire circuit frontier q new_node_id))
          (snd (splice_wire circuit frontier q new_node_id))"
-        using
-          splice_wire_preserves_valid_frontier[
-            OF
-            Cons.prems(1)
-            Cons.prems(2)
-            new_node_uses_first_wire
-            new_node_not_first_frontier
-            new_node_has_no_other_successor_on_first_wire
-            ]
-        .
+      using
+        splice_wire_preserves_valid_frontier[
+          OF
+          Cons.prems(1)
+          Cons.prems(2)
+          new_node_uses_first_wire
+          new_node_not_first_frontier
+          new_node_has_no_other_successor_on_first_wire
+          ]
+      .
 
-      then show ?thesis
-        using splice_result
-        by simp
-    qed
+    then show ?thesis
+      using splice_result
+      by simp
+  qed
 
 
   have new_node_still_exists:
@@ -3331,44 +3331,44 @@ next
       using splice_result wire_not_first
       by (simp add: splice_wire_def split_pairs)
 
-  have new_node_not_remaining_frontiers:
-    (* The first splice updates only the frontier entry for q.
+    have new_node_not_remaining_frontiers:
+      (* The first splice updates only the frontier entry for q.
 
        Every wire in qs is different from q because the original wire
        list is distinct. Therefore, the frontier entries for all
        remaining wires are unchanged, and the inserted node is still
        different from those frontier nodes.
     *)
-    "\<forall>wire \<in> set qs.
+      "\<forall>wire \<in> set qs.
        new_node_id \<noteq> updated_frontier wire"
-  proof (intro ballI)
-    fix wire
+    proof (intro ballI)
+      fix wire
 
-    assume wire_in_remaining:
-      "wire \<in> set qs"
+      assume wire_in_remaining:
+        "wire \<in> set qs"
 
-    have wire_not_first:
-      "wire \<noteq> q"
-      using Cons.prems(4) wire_in_remaining
-      by auto
+      have wire_not_first:
+        "wire \<noteq> q"
+        using Cons.prems(4) wire_in_remaining
+        by auto
 
-    have remaining_frontier_unchanged:
-      "updated_frontier wire = frontier wire"
-      using splice_result wire_not_first
-      by (simp add: splice_wire_def split_pairs)
+      have remaining_frontier_unchanged:
+        "updated_frontier wire = frontier wire"
+        using splice_result wire_not_first
+        by (simp add: splice_wire_def split_pairs)
 
-    have new_node_not_old_frontier:
-      "new_node_id \<noteq> frontier wire"
-      using Cons.prems(5) wire_in_remaining
-      by simp
+      have new_node_not_old_frontier:
+        "new_node_id \<noteq> frontier wire"
+        using Cons.prems(5) wire_in_remaining
+        by simp
 
-    show
-      "new_node_id \<noteq> updated_frontier wire"
-      using
-        remaining_frontier_unchanged
-        new_node_not_old_frontier
-      by simp
-  qed
+      show
+        "new_node_id \<noteq> updated_frontier wire"
+        using
+          remaining_frontier_unchanged
+          new_node_not_old_frontier
+        by simp
+    qed
 
     have new_node_not_old_frontier:
       "new_node_id \<noteq> frontier wire"
@@ -3455,13 +3455,13 @@ next
            new_node_id))"
     using Cons.IH[
         OF
-          first_splice_preserves_frontier
-          new_node_still_exists
-          new_node_uses_remaining_wires
-          remaining_wires_distinct
-          new_node_not_remaining_frontiers
-          new_node_has_no_other_successors_remaining
-    ] .
+        first_splice_preserves_frontier
+        new_node_still_exists
+        new_node_uses_remaining_wires
+        remaining_wires_distinct
+        new_node_not_remaining_frontiers
+        new_node_has_no_other_successors_remaining
+        ] .
 
   show ?case
     using splice_result remaining_splices_preserve_frontier
@@ -3483,9 +3483,9 @@ lemma insert_operation_preserves_valid_frontier:
   *)
   assumes valid_state:
     "is_valid_construction_state circuit frontier"
-  
-  assumes operation_valid_for_circuit:
-    "operation_in_circuit circuit op"
+
+assumes operation_valid_for_circuit:
+  "operation_in_circuit circuit op"
 
 shows "is_valid_frontier
     (fst (insert_operation circuit frontier op))
@@ -3635,15 +3635,15 @@ proof -
       by auto
 
     have False
-  using
-    source_exists
-    next_node_id_unused
-  unfolding node_exists_def
-  by simp
+      using
+        source_exists
+        next_node_id_unused
+      unfolding node_exists_def
+      by simp
 
-then show
-  "successor_id = get_output_node_id q"
-  by simp
+    then show
+      "successor_id = get_output_node_id q"
+      by simp
   qed
 
   have frontier_after_splice:
@@ -3765,22 +3765,22 @@ lemma insert_operation_preserves_other_nodes:
   assumes different_node_id:
     "other_node_id \<noteq> next_id circuit"
 
-  shows
-    "nodes
+shows
+  "nodes
        (fst (insert_operation circuit frontier op))
        other_node_id
      =
      nodes circuit other_node_id"
-  proof -
-    show ?thesis
-      using different_node_id
-      unfolding
-        insert_operation_def
-        Let_def
-        insert_node_def
-        increment_node_id_def
-      by simp
-  qed
+proof -
+  show ?thesis
+    using different_node_id
+    unfolding
+      insert_operation_def
+      Let_def
+      insert_node_def
+      increment_node_id_def
+    by simp
+qed
 
 
 lemma insert_operation_next_id[simp]:
@@ -4826,13 +4826,13 @@ assumes node_uses_q:
 
 assumes frontier_unique_successor:
   (* The frontier-to-output edge is the frontier node's only immediate
-     outgoing edge on q. *)
+       outgoing edge on q. *)
   "has_unique_wire_successor circuit q (frontier q)"
 
 shows
   "node_id = get_output_node_id q
-     \<or> node_id = frontier q
-     \<or> wire_reaches circuit q node_id (frontier q)"
+       \<or> node_id = frontier q
+       \<or> wire_reaches circuit q node_id (frontier q)"
 
 proof -
   have comparable:
@@ -6607,7 +6607,7 @@ assumes linear_before:
 
 shows
   "all_wires_linear
-         (fst (insert_operation circuit frontier op))"
+           (fst (insert_operation circuit frontier op))"
 
   unfolding all_wires_linear_def
 
@@ -7200,8 +7200,1034 @@ proof -
 qed
 
 
-(* ---------------- Operation insertion ends ---------------- *)
+lemma insert_operation_preserves_acyclicity:
+  (* Inserting a valid operation at the current construction frontier
+     preserves global graph acyclicity.
 
+     On every affected wire, insertion removes the final edge
+
+         frontier(q) \<rightarrow> output(q)
+
+     and replaces it with
+
+         frontier(q) \<rightarrow> new_node
+         new_node \<rightarrow> output(q).
+
+     The new operation node was previously unused, so no path can
+     already pass through it. The new node is inserted strictly after
+     each affected frontier node and strictly before the corresponding
+     output node. Therefore, the new edges cannot introduce a directed
+     cycle.
+  *)
+  assumes valid_state:
+    "is_valid_construction_state circuit frontier"
+    and operation_valid:
+    "operation_in_circuit circuit op"
+    and acyclic:
+    "is_acyclic_circuit circuit"
+    and linear_before:
+    "all_wires_linear circuit"
+  shows
+    "is_acyclic_circuit
+       (fst (insert_operation circuit frontier op))"
+
+proof -
+  let ?new_node_id = "next_id circuit"
+
+  let ?updated_circuit = "fst (insert_operation circuit frontier op)"
+
+  let ?old_relation = "edge_relation circuit"
+
+  let ?updated_relation = "edge_relation ?updated_circuit"
+
+  have old_relation_acyclic:
+    "acyclic ?old_relation" (* Previous edge relations are acyclic *)
+    using acyclic
+    unfolding is_acyclic_circuit_def
+    by simp
+
+  have circuit_well_formed:
+    "is_well_formed_circuit circuit" (* Previous circuit is well-formed *)
+    using valid_state
+    unfolding is_valid_construction_state_def
+    by simp
+
+  have new_node_unused:
+    "nodes circuit ?new_node_id = None" (* New node was unused before insertion *)
+    using valid_state
+    unfolding
+      is_valid_construction_state_def
+      next_id_is_unused_def
+    by simp
+
+  have new_node_not_old_source:
+    "\<And>target_id.
+       (?new_node_id, target_id) \<notin> ?old_relation" (* New node did not occur in any old edge *)
+  proof -
+    fix target_id
+    show
+      "(?new_node_id, target_id) \<notin> ?old_relation"
+
+    proof
+      assume relation_edge:
+        "(?new_node_id, target_id) \<in> ?old_relation"
+
+      then obtain e where
+        edge_in:
+        "e \<in> edges circuit"
+        and source_eq:
+        "edge_source e = ?new_node_id"
+        unfolding edge_relation_def
+        by blast
+
+      have edge_well_formed:
+        "is_well_formed_edge circuit e"
+        using circuit_well_formed edge_in
+        unfolding
+          is_well_formed_circuit_def
+          are_well_formed_edges_def
+        by simp
+
+      have source_exists:
+        "node_exists circuit ?new_node_id"
+        using edge_well_formed source_eq
+        unfolding is_well_formed_edge_def
+        by simp
+
+      then show False
+        using new_node_unused
+        unfolding node_exists_def
+        by simp
+    qed
+  qed
+
+  have new_node_not_old_target:
+    "\<And>source_id.
+       (source_id, ?new_node_id) \<notin> ?old_relation"
+  proof -
+    fix source_id
+
+    show
+      "(source_id, ?new_node_id) \<notin> ?old_relation"
+    proof
+      assume relation_edge:
+        "(source_id, ?new_node_id) \<in> ?old_relation"
+
+      then obtain e where
+        edge_in:
+        "e \<in> edges circuit"
+        and target_eq:
+        "edge_target e = ?new_node_id"
+        unfolding edge_relation_def
+        by auto
+
+      have edge_well_formed:
+        "is_well_formed_edge circuit e"
+        using circuit_well_formed edge_in
+        unfolding is_well_formed_circuit_def
+          are_well_formed_edges_def
+        by blast
+
+      have target_exists:
+        "node_exists circuit ?new_node_id"
+        using edge_well_formed target_eq
+        unfolding is_well_formed_edge_def
+        by simp
+
+      then show False
+        using new_node_unused
+        unfolding node_exists_def
+        by simp
+    qed
+  qed
+
+(* ---------- Establish well-formedness and linearity after insertion proofs begin --------- *)
+
+  have updated_state_valid:
+    "is_valid_construction_state
+       ?updated_circuit
+       (snd (insert_operation circuit frontier op))"
+    using valid_state operation_valid
+    by (simp add: insert_operation_preserves_valid_construction_state)
+
+  have updated_well_formed:
+    "is_well_formed_circuit ?updated_circuit"
+    using updated_state_valid
+    unfolding is_valid_construction_state_def
+    by simp
+
+  have updated_linear:
+    "all_wires_linear ?updated_circuit"
+    using valid_state operation_valid linear_before
+    by (simp add: insert_operation_preserves_wire_linearity)
+
+(* ---------- Establish well-formedness and linearity after insertion proofs end --------- *)
+
+  have updated_output_is_sink:
+    "\<And>q target_id.
+       qubit_in_circuit ?updated_circuit q
+       \<Longrightarrow>
+       (get_output_node_id q, target_id)
+         \<notin> ?updated_relation"
+  proof -
+    fix q target_id
+
+    assume valid_q:
+      "qubit_in_circuit ?updated_circuit q"
+
+    show
+      "(get_output_node_id q, target_id)
+         \<notin> ?updated_relation"
+    proof
+      assume relation_edge:
+        "(get_output_node_id q, target_id)
+           \<in> ?updated_relation"
+
+      then obtain e where
+        edge_in:
+        "e \<in> edges ?updated_circuit"
+        and source_eq:
+        "edge_source e = get_output_node_id q"
+        and  target_eq:
+        "edge_target e = target_id"
+        unfolding edge_relation_def
+        by auto
+
+      have edge_well_formed:
+        "is_well_formed_edge ?updated_circuit e"
+        using
+          updated_well_formed
+          edge_in
+        unfolding
+          is_well_formed_circuit_def
+          are_well_formed_edges_def
+        by simp
+
+      have output_node_value:
+        "nodes ?updated_circuit (get_output_node_id q)
+           = Some (OutputNode q)"
+        using updated_well_formed valid_q
+        unfolding is_well_formed_circuit_def
+          are_well_formed_boundary_nodes_def
+          qubit_in_circuit_def
+        by (cases q; simp)
+
+      have edge_wire_is_q:
+        "edge_wire e = q"
+        using edge_well_formed source_eq output_node_value
+        unfolding is_well_formed_edge_def
+        by (cases "nodes ?updated_circuit (edge_source e)") auto
+
+      have wire_linear_q:
+        "wire_is_linear ?updated_circuit q"
+        using updated_linear valid_q
+        unfolding all_wires_linear_def
+        by simp
+
+      have no_output_successor:
+        "\<nexists>successor_id.
+           (get_output_node_id q, successor_id)
+             \<in> wire_edge_relation ?updated_circuit q"
+        using wire_linear_q
+        unfolding wire_is_linear_def
+        by simp
+
+      have output_wire_edge:
+        "(get_output_node_id q, target_id)
+          \<in> wire_edge_relation ?updated_circuit q"
+      proof -
+        have edge_eq:
+          "e =
+             make_edge
+               (get_output_node_id q)
+               target_id
+               q"
+          using source_eq edge_wire_is_q target_eq
+          by (cases e) (simp add: make_edge_def)
+
+        show ?thesis
+          unfolding wire_edge_relation_def
+          using edge_in edge_eq
+          by simp
+      qed
+
+      then show False
+        using no_output_successor
+        by simp
+    qed
+  qed
+
+  have updated_cycle_implies_old_cycle:
+    "\<And>node_id.
+       (node_id, node_id) \<in> ?updated_relation\<^sup>+
+       \<Longrightarrow>
+       (node_id, node_id) \<in> ?old_relation\<^sup>+"
+
+  proof -
+    fix node_id
+    assume updated_cycle:
+      "(node_id, node_id) \<in> ?updated_relation\<^sup>+"
+
+    have updated_edge_is_old_or_new:
+      "\<And>u v.
+         (u,v) \<in> ?updated_relation
+        \<Longrightarrow>
+         (u,v) \<in> ?old_relation
+         \<or> u = ?new_node_id
+         \<or> v = ?new_node_id"
+    proof -
+      fix u v
+      assume updated_edge:
+        "(u,v) \<in> ?updated_relation" 
+      obtain e where
+        edge_in:
+        "e \<in> edges ?updated_circuit"
+        and source:
+        "edge_source e = u"
+        and target:
+        "edge_target e = v"
+
+        using updated_edge
+        unfolding edge_relation_def
+        by auto
+
+      have splice_wires_edge_cases:
+        "\<And>base_circuit base_frontier qs e.
+           e \<in> edges
+             (fst
+               (splice_wires
+                 base_circuit
+                 base_frontier
+                 qs
+                 ?new_node_id))
+          \<Longrightarrow>
+           e \<in> edges base_circuit
+           \<or> edge_source e = ?new_node_id
+           \<or> edge_target e = ?new_node_id"
+      proof -
+        fix base_circuit base_frontier qs e
+
+        show
+          "e \<in> edges
+       (fst
+         (splice_wires
+           base_circuit
+           base_frontier
+           qs
+           ?new_node_id))
+     \<Longrightarrow>
+       e \<in> edges base_circuit
+       \<or> edge_source e = ?new_node_id
+       \<or> edge_target e = ?new_node_id"
+        proof (induction qs arbitrary: base_circuit base_frontier)
+          case Nil
+
+          then show ?case
+            by simp
+
+        next
+          case (Cons q qs)
+
+          obtain first_circuit first_frontier where first_splice:
+            "splice_wire
+               base_circuit
+               base_frontier
+               q
+               ?new_node_id
+             =
+             (first_circuit, first_frontier)"
+            by (cases
+                "splice_wire
+                   base_circuit
+                   base_frontier
+                   q
+                   ?new_node_id")
+
+          have after_remaining:
+            "e \<in> edges first_circuit
+           \<or> edge_source e = ?new_node_id
+           \<or> edge_target e = ?new_node_id"
+            using Cons.prems
+              Cons.IH[of first_circuit first_frontier]
+              first_splice
+            by simp
+
+          then show ?case
+            using first_splice
+            unfolding
+              splice_wire_def
+              splice_wire_without_updating_frontier_def
+              insert_edge_def
+              delete_edge_def
+              make_edge_def
+              Let_def
+            by auto
+        qed
+      qed
+
+      have edge_cases:
+        "e \<in> edges circuit
+       \<or> edge_source e = ?new_node_id
+       \<or> edge_target e = ?new_node_id"
+      proof -
+        have spliced_edge_cases:
+          "e \<in> edges (insert_node ?new_node_id (OperationNode op) circuit)
+         \<or> edge_source e = ?new_node_id
+         \<or> edge_target e = ?new_node_id"
+          using
+            edge_in
+            splice_wires_edge_cases[
+              where
+                base_circuit =
+                "insert_node
+               ?new_node_id
+               (OperationNode op)
+               circuit"
+                and base_frontier = frontier
+                and qs = "op_qargs op"
+                and e = e
+                ]
+          unfolding
+            insert_operation_def
+            Let_def
+          by simp
+
+        then show ?thesis
+          unfolding insert_node_def
+          by simp
+      qed
+
+      from edge_cases
+      consider
+        (old) "e \<in> edges circuit"
+        | (src) "edge_source e = ?new_node_id"
+        | (tgt) "edge_target e = ?new_node_id"
+        by auto
+
+      show
+        "(u,v) \<in> ?old_relation
+         \<or> u = ?new_node_id
+         \<or> v = ?new_node_id"
+
+        using edge_cases source target
+        unfolding edge_relation_def
+        by auto
+    qed
+
+    have updated_path_old_or_through_new:
+      "\<And>u v.
+     (u, v) \<in> ?updated_relation\<^sup>+
+     \<Longrightarrow>
+       (u, v) \<in> ?old_relation\<^sup>+
+       \<or>
+       ((u, ?new_node_id) \<in> ?updated_relation\<^sup>*
+        \<and>
+        (?new_node_id, v) \<in> ?updated_relation\<^sup>*)"
+    proof -
+      fix u v
+
+      assume updated_path:
+        "(u, v) \<in> ?updated_relation\<^sup>+"
+
+      show
+        "(u, v) \<in> ?old_relation\<^sup>+
+     \<or>
+     ((u, ?new_node_id) \<in> ?updated_relation\<^sup>*
+      \<and>
+      (?new_node_id, v) \<in> ?updated_relation\<^sup>*)"
+        using updated_path
+      proof (induction rule: trancl_induct)
+        case (base v)
+
+        have edge_cases:
+          "(u, v) \<in> ?old_relation
+       \<or> u = ?new_node_id
+       \<or> v = ?new_node_id"
+          using updated_edge_is_old_or_new[OF base]
+          .
+
+        then show ?case
+        proof
+          assume old_edge:
+            "(u, v) \<in> ?old_relation"
+
+          then have
+            "(u, v) \<in> ?old_relation\<^sup>+"
+            by (rule r_into_trancl)
+
+          then show ?case
+            by simp
+
+        next
+          assume new_endpoint:
+            "u = ?new_node_id \<or> v = ?new_node_id"
+
+          then show ?case
+          proof
+            assume source_new:
+              "u = ?new_node_id"
+
+            have start_refl:
+              "(u, ?new_node_id) \<in> ?updated_relation\<^sup>*"
+              using source_new
+              by simp
+
+            have remaining_edge:
+              "(?new_node_id, v) \<in> ?updated_relation\<^sup>*"
+              using base source_new
+              by auto
+
+            show ?case
+              using start_refl remaining_edge
+              by blast
+
+          next
+            assume target_new:
+              "v = ?new_node_id"
+
+            have first_edge:
+              "(u, ?new_node_id) \<in> ?updated_relation\<^sup>*"
+              using base target_new
+              by auto
+
+            have end_refl:
+              "(?new_node_id, v) \<in> ?updated_relation\<^sup>*"
+              using target_new
+              by simp
+
+            show ?case
+              using first_edge end_refl
+              by simp
+          qed
+        qed
+
+      next
+        case (step v w)
+
+        have final_edge_cases:
+          "(v, w) \<in> ?old_relation
+         \<or> v = ?new_node_id
+         \<or> w = ?new_node_id"
+          using updated_edge_is_old_or_new[OF step.hyps(2)]
+          .
+
+        have induction_hypothesis:
+          "(u, v) \<in> ?old_relation\<^sup>+
+       \<or>
+       ((u, ?new_node_id) \<in> ?updated_relation\<^sup>* \<and> (?new_node_id, v) \<in> ?updated_relation\<^sup>*)"
+          by (simp add: step.IH)
+
+        from induction_hypothesis
+        show ?case
+        proof
+          assume old_path:
+            "(u, v) \<in> ?old_relation\<^sup>+"
+
+          from final_edge_cases
+          show ?thesis
+          proof
+            assume old_edge:
+              "(v, w) \<in> ?old_relation"
+
+            have old_extended:
+              "(u, w) \<in> ?old_relation\<^sup>+"
+              using old_path old_edge
+              by (rule trancl_into_trancl)
+
+            then show ?thesis
+              by blast
+
+          next
+            assume new_endpoint:
+              "v = ?new_node_id \<or> w = ?new_node_id"
+
+            then show ?thesis
+            proof
+              assume source_is_new:
+                "v = ?new_node_id"
+
+              have path_to_new:
+                "(u, ?new_node_id) \<in> ?updated_relation\<^sup>*"
+                using step.hyps(1) source_is_new
+                by (simp add: trancl_into_rtrancl)
+
+              have path_from_new:
+                "(?new_node_id, w) \<in> ?updated_relation\<^sup>*"
+                using step.hyps(2) source_is_new
+                by auto
+
+              show ?thesis
+                using path_to_new path_from_new
+                by blast
+
+            next
+              assume target_is_new:
+                "w = ?new_node_id"
+
+              have updated_extended:
+                "(u, w) \<in> ?updated_relation\<^sup>+"
+                using step.hyps(1) step.hyps(2)
+                by (rule trancl_into_trancl)
+
+              have path_to_new:
+                "(u, ?new_node_id) \<in> ?updated_relation\<^sup>*"
+                using updated_extended target_is_new
+                by (simp add: trancl_into_rtrancl)
+
+              have path_from_new:
+                "(?new_node_id, w) \<in> ?updated_relation\<^sup>*"
+                using target_is_new
+                by simp
+
+              show ?thesis
+                using path_to_new path_from_new
+                by blast
+            qed
+          qed
+
+        next
+          assume through_new:
+            "(u, ?new_node_id) \<in> ?updated_relation\<^sup>*
+          \<and>
+         (?new_node_id, v) \<in> ?updated_relation\<^sup>*"
+
+
+          have path_to_new:
+            "(u, ?new_node_id) \<in> ?updated_relation\<^sup>*"
+            using through_new
+            by blast
+
+          have path_from_new:
+            "(?new_node_id, v) \<in> ?updated_relation\<^sup>*"
+            using through_new
+            by blast
+
+          have extended_from_new:
+            "(?new_node_id, w) \<in> ?updated_relation\<^sup>*"
+            using path_from_new step.hyps(2)
+            by (rule rtrancl_into_rtrancl)
+
+          show ?thesis
+            using path_to_new extended_from_new
+            by blast
+
+        qed
+      qed
+    qed
+
+
+    have updated_cycle_old_or_contains_new:
+      "\<And>x.
+         (x, x) \<in> ?updated_relation\<^sup>+
+         \<Longrightarrow>
+         (x, x) \<in> ?old_relation\<^sup>+
+       \<or> (?new_node_id, ?new_node_id) \<in> ?updated_relation\<^sup>+"
+      by (metis
+          rtrancl_eq_or_trancl
+          trancl_rtrancl_trancl
+          updated_path_old_or_through_new)
+
+
+    have splice_wires_new_source_cases:
+      "\<And>base_circuit base_frontier qs e.
+     distinct qs
+     \<Longrightarrow>
+     (\<forall>q \<in> set qs.
+        base_frontier q \<noteq> ?new_node_id)
+     \<Longrightarrow>
+     e \<in> edges
+       (fst
+         (splice_wires
+           base_circuit
+           base_frontier
+           qs
+           ?new_node_id))
+     \<Longrightarrow>
+     edge_source e = ?new_node_id
+     \<Longrightarrow>
+       (e \<in> edges base_circuit
+        \<and> edge_source e = ?new_node_id)
+       \<or>
+       (\<exists>q \<in> set qs.
+          e =
+            make_edge
+              ?new_node_id
+              (get_output_node_id q)
+              q)"
+    proof -
+      fix base_circuit :: quantum_circuit
+        and base_frontier :: "qubit \<Rightarrow> node_id"
+        and qs :: "qubit list"
+        and e :: edge
+
+      assume distinct_qs:
+        "distinct qs"
+
+      assume frontier_not_new:
+        "\<forall>q \<in> set qs.
+         base_frontier q \<noteq> ?new_node_id"
+
+      assume edge_in:
+        "e \<in> edges
+       (fst
+         (splice_wires
+           base_circuit
+           base_frontier
+           qs
+           ?new_node_id))"
+
+      assume source_is_new:
+        "edge_source e = ?new_node_id"
+
+      show
+        "(e \<in> edges base_circuit
+      \<and> edge_source e = ?new_node_id)
+     \<or>
+     (\<exists>q \<in> set qs.
+        e =
+          make_edge
+            ?new_node_id
+            (get_output_node_id q)
+            q)"
+        using edge_in source_is_new distinct_qs frontier_not_new
+      proof (induction qs arbitrary: base_circuit base_frontier)
+        case Nil
+
+        then show ?case
+          by simp
+
+      next
+        case (Cons q qs)
+
+        have q_not_in_remaining:
+          "q \<notin> set qs"
+
+          using Cons.prems(3)
+          by simp
+
+        have current_frontier_not_new:
+          "base_frontier q \<noteq> ?new_node_id"
+          using Cons.prems(4)
+          by simp
+
+        obtain first_circuit first_frontier where first_splice:
+          "splice_wire
+         base_circuit
+         base_frontier
+         q
+         ?new_node_id
+       =
+       (first_circuit, first_frontier)"
+          by (cases
+              "splice_wire
+             base_circuit
+             base_frontier
+             q
+             ?new_node_id")
+
+        have remaining_edge:
+          "e \<in> edges
+     (fst
+       (splice_wires
+         first_circuit
+         first_frontier
+         qs
+         ?new_node_id))"
+          using Cons.prems(1) first_splice
+          by simp
+
+        have remaining_source:
+          "edge_source e = ?new_node_id"
+          using Cons.prems(2)
+          .
+
+        have remaining_distinct:
+          "distinct qs"
+          using Cons.prems(3)
+          by simp
+
+        have remaining_frontier_not_new:
+          "\<forall>r \<in> set qs.
+     first_frontier r \<noteq> ?new_node_id"
+          by (metis
+              Cons.prems(4)
+              first_splice list.set_intros(2)
+              q_not_in_remaining
+              snd_eqD
+              splice_wire_def
+              update_frontier_other)
+
+        have after_remaining:
+          "(e \<in> edges first_circuit
+        \<and> edge_source e = ?new_node_id)
+       \<or>
+       (\<exists>r \<in> set qs.
+          e =
+            make_edge
+              ?new_node_id
+              (get_output_node_id r)
+              r)"
+          using
+            Cons.IH[
+              OF
+              remaining_edge
+              remaining_source
+              remaining_distinct
+              remaining_frontier_not_new] .
+
+        then show ?case
+          using 
+            first_splice
+            Cons.prems(4)
+            edges_splice_wire_without_updating_frontier
+          unfolding
+            splice_wire_def
+            splice_wire_without_updating_frontier_def
+            insert_edge_def
+            delete_edge_def
+            make_edge_def
+            Let_def
+          by auto
+      qed
+    qed
+    have new_node_successor_is_output:
+      "\<And>target_id.
+     (?new_node_id, target_id) \<in> ?updated_relation
+     \<Longrightarrow>
+     \<exists>q.
+       qubit_in_circuit ?updated_circuit q
+       \<and> target_id = get_output_node_id q"
+    proof -
+      fix target_id
+
+      assume relation_edge:
+        "(?new_node_id, target_id) \<in> ?updated_relation"
+
+      obtain e where
+        edge_in:
+        "e \<in> edges ?updated_circuit"
+        and source_eq:
+        "edge_source e = ?new_node_id"
+        and target_eq:
+        "edge_target e = target_id"
+        using relation_edge
+        unfolding edge_relation_def
+        by auto
+
+      have distinct_qargs:
+        "distinct (op_qargs op)"
+        using operation_valid
+        unfolding operation_in_circuit_def
+        by (simp add: is_valid_operation_def)
+
+      have frontier_not_new_on_qargs:
+        "\<forall>q \<in> set (op_qargs op).
+     frontier q \<noteq> ?new_node_id"
+      proof (intro ballI)
+        fix q
+        assume q_in_args:
+          "q \<in> set (op_qargs op)"
+
+        have valid_q:
+          "qubit_in_circuit circuit q"
+          using operation_valid q_in_args
+          unfolding operation_in_circuit_def
+          by simp
+
+        have frontier_exists:
+          "node_exists circuit (frontier q)"
+
+          using
+            valid_state
+            valid_q
+            is_valid_frontier_def
+            node_exists_def
+            is_valid_construction_state_def
+
+          by auto
+
+        show "frontier q \<noteq> ?new_node_id"
+        proof
+          assume frontier_eq:
+            "frontier q = ?new_node_id"
+
+          have new_node_exists:
+            "node_exists circuit ?new_node_id"
+            using frontier_exists frontier_eq
+            by simp
+
+          show False
+            using new_node_exists new_node_unused
+            unfolding node_exists_def
+            by simp
+        qed
+      qed
+
+      have outgoing_cases:
+        "(e \<in>
+        edges
+          (insert_node
+            ?new_node_id
+            (OperationNode op)
+            circuit)
+      \<and> edge_source e = ?new_node_id)
+     \<or>
+     (\<exists>q \<in> set (op_qargs op).
+        e =
+          make_edge
+            ?new_node_id
+            (get_output_node_id q)
+            q)"
+        using
+          edge_in
+          source_eq
+          splice_wires_new_source_cases[
+            where
+              base_circuit =
+              "insert_node
+               ?new_node_id
+               (OperationNode op)
+               circuit"
+              and base_frontier = frontier
+              and qs = "op_qargs op"
+              and e = e]
+        unfolding insert_operation_def Let_def
+        by (simp add:
+            distinct_qargs
+            frontier_not_new_on_qargs)
+
+
+      have inserted_case_impossible:
+        "\<not>
+      (e \<in>
+         edges
+           (insert_node
+             ?new_node_id
+             (OperationNode op)
+             circuit)
+       \<and> edge_source e = ?new_node_id)"
+      proof
+        assume inserted_old:
+          "e \<in>
+         edges
+           (insert_node
+             ?new_node_id
+             (OperationNode op)
+             circuit)
+       \<and> edge_source e = ?new_node_id"
+
+        then have old_edge:
+          "e \<in> edges circuit"
+          unfolding insert_node_def
+          by simp
+
+        have old_relation_edge:
+          "(?new_node_id, edge_target e) \<in> ?old_relation"
+          using old_edge source_eq
+          unfolding edge_relation_def
+          by blast
+
+        show False
+          using
+            new_node_not_old_source[of "edge_target e"]
+            old_relation_edge
+          by contradiction
+      qed
+
+      then obtain q where
+        q_in_args:
+        "q \<in> set (op_qargs op)"
+        and edge_eq:
+        "e =
+        make_edge
+          ?new_node_id
+          (get_output_node_id q)
+          q"
+        using outgoing_cases
+        by blast
+
+      have valid_q_old:
+        "qubit_in_circuit circuit q"
+        using operation_valid q_in_args
+        unfolding operation_in_circuit_def
+        by blast
+
+      have valid_q_updated:
+        "qubit_in_circuit ?updated_circuit q"
+        using
+          qubit_in_circuit_def
+          valid_q_old
+        by auto
+
+      have target_is_output:
+        "target_id = get_output_node_id q"
+        using target_eq edge_eq
+        unfolding make_edge_def
+        by simp
+
+      show
+        "\<exists>q.
+       qubit_in_circuit ?updated_circuit q
+       \<and> target_id = get_output_node_id q"
+        using valid_q_updated target_is_output
+        by blast
+    qed
+
+    have new_node_not_on_updated_cycle:
+      "(?new_node_id, ?new_node_id) \<notin> ?updated_relation\<^sup>+"
+      by (metis
+          new_node_successor_is_output
+          rtrancl_trancl_trancl
+          tranclD updated_output_is_sink)
+
+    show "(node_id, node_id) \<in> ?old_relation\<^sup>+"
+      using
+        updated_cycle
+        updated_cycle_old_or_contains_new
+        new_node_not_on_updated_cycle
+      by simp
+  qed
+
+  have updated_relation_acyclic:
+    "acyclic ?updated_relation"
+
+  proof -
+    show ?thesis
+      unfolding acyclic_def
+    proof
+      fix node_id
+
+      show
+        "(node_id, node_id) \<notin> ?updated_relation\<^sup>+"
+      proof
+        assume updated_cycle:
+          "(node_id, node_id) \<in> ?updated_relation\<^sup>+"
+
+        have old_cycle:
+          "(node_id, node_id) \<in> ?old_relation\<^sup>+"
+          using updated_cycle_implies_old_cycle[OF updated_cycle]
+          by simp
+
+        have no_old_cycle:
+          "(node_id, node_id) \<notin> ?old_relation\<^sup>+"
+          using old_relation_acyclic
+          unfolding acyclic_def
+          by simp
+
+        show False
+          using old_cycle no_old_cycle
+          by simp
+      qed
+    qed
+  qed
+
+  show ?thesis
+    using updated_relation_acyclic
+    unfolding is_acyclic_circuit_def
+    by simp
+qed
+
+(* ---------------- Operation insertion ends ---------------- *)
 
 lemma initial_construction_state_is_valid:
   (* The initial circuit together with the initial frontier forms a
@@ -7217,9 +8243,6 @@ lemma initial_construction_state_is_valid:
   by simp
 
 (* Example definitions to demonstrate gate and operation *)
-
-
-
 
 definition ex_h_q0 :: operation where
   "ex_h_q0 = \<lparr>op_gate = Gate_H, op_qargs = [Qubit 0]\<rparr>"
