@@ -2,3 +2,5 @@ AFP/
 .isabelle/
 *.ps1
 *.thy~
+__pycache__/
+*.py[cod]
