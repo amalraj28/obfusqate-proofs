@@ -696,6 +696,16 @@ definition is_well_formed_circuit :: "quantum_circuit \<Rightarrow> bool" where
      \<and> are_well_formed_operation_nodes circuit
   "
 
+definition is_valid_quantum_circuit :: "quantum_circuit \<Rightarrow> bool" where
+  (* A structurally valid quantum circuit satisfies every invariant
+     established for the DAG representation. *)
+  "is_valid_quantum_circuit circuit \<longleftrightarrow>
+      is_well_formed_circuit circuit
+    \<and> is_acyclic_circuit circuit
+    \<and> all_wires_linear circuit"
+
+
+
 lemma initial_edges_cases: (* helper lemma *)
   (* Assuming that an edge e belongs to the initial circuit, this proof says that we can always find a qubit `qubit_number` such that the edge e is canonical input-to-output edge for that qubit. Meaning, edge e would always be from some InputNode(q0) to OutputNode(q0), where q0 is a valid qubit.
   *)
@@ -1251,9 +1261,11 @@ proof (intro allI impI)
   qed
 qed
 
+
 (* ----- Validity check (Well-formedness check) for entire circuit ends ----- *)
 
 (* -------- Fresh node ID helpers begin -------- *)
+
 
 definition increment_node_id :: "node_id \<Rightarrow> node_id" where
   (* Given a node ID, return the next node ID (Add 1 to it) *)
@@ -8227,7 +8239,45 @@ proof -
     by simp
 qed
 
-(* ---------------- Operation insertion ends ---------------- *)
+
+lemma insert_operation_preserves_valid_quantum_circuit:
+  (* Inserting a valid operation into a valid construction state
+     preserves the complete structural validity of the quantum circuit.
+
+     Before insertion:
+
+       1. the circuit is well formed;
+       2. the graph is acyclic;
+       3. all nodes on each valid wire are comparable; and
+       4. every valid wire satisfies the stronger linear-chain
+          invariant required by the insertion proofs.
+
+     The previously proved insertion theorems establish that the updated
+     circuit remains well formed, acyclic, and wire-linear. Since wire
+     linearity implies wire-node comparability, the updated circuit
+     satisfies every component of is_valid_quantum_circuit.
+  *)
+  assumes valid_circuit:
+    "is_valid_quantum_circuit circuit"
+
+  assumes valid_state:
+    "is_valid_construction_state circuit frontier"
+
+  assumes operation_valid:
+    "operation_in_circuit circuit op"
+
+  shows
+    "is_valid_quantum_circuit
+       (fst (insert_operation circuit frontier op))"
+  using
+    insert_operation_preserves_acyclicity
+    insert_operation_preserves_well_formed_circuit
+    insert_operation_preserves_wire_linearity
+    is_valid_construction_state_def
+    is_valid_quantum_circuit_def
+    operation_valid valid_circuit
+    valid_state
+  by simp
 
 lemma initial_construction_state_is_valid:
   (* The initial circuit together with the initial frontier forms a
