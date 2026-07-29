@@ -11,6 +11,16 @@ from pathlib import Path
 from generate_ai_theory import GenerationError, generate_file
 
 
+def format_generation_error(source: Path, error: OSError | GenerationError) -> str:
+    location = str(source)
+    if isinstance(error, GenerationError) and error.line is not None:
+        location += f":{error.line}"
+    context = ""
+    if isinstance(error, GenerationError) and error.context:
+        context = f" [{error.context}]"
+    return f"generation failed: {location}: {error}{context}"
+
+
 def signature(path: Path) -> tuple[int, int, int] | None:
     try:
         stat = path.stat()
@@ -47,7 +57,7 @@ def watch(source: Path, output: Path, interval: float, debounce: float) -> None:
                     try:
                         generate_file(source, output)
                     except (OSError, GenerationError) as error:
-                        print(f"generation failed: {error}", file=sys.stderr)
+                        print(format_generation_error(source, error), file=sys.stderr)
                     else:
                         print(f"regenerated {output}")
         time.sleep(interval)

@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from generate_ai_theory import GenerationError, generate_file, transform_theory
+from watch_ai_theory import format_generation_error
 
 
 def theory(body: str) -> str:
@@ -206,6 +207,32 @@ class TransformTheoryTests(unittest.TestCase):
             self.transform('lemma x: "P"\nproof -\n  show P sorry')
         with self.assertRaises(GenerationError):
             self.transform('lemma x: "P"\n  apply simp')
+
+    def test_structured_proof_error_identifies_proof_and_theorem(self) -> None:
+        text = theory(
+            '''
+            (* A comment whose removed lines must not shift diagnostics.
+               The watcher should report positions in the source file. *)
+            lemma before: "Q" by simp
+
+            lemma broken:
+              "P"
+            proof -
+              show P sorry
+            '''
+        )
+        with self.assertRaises(GenerationError) as raised:
+            transform_theory(text, "Skeleton")
+
+        error = raised.exception
+        self.assertEqual(error.line, 11)
+        self.assertEqual(error.context, "lemma broken:")
+        message = format_generation_error(Path("Source.thy"), error)
+        self.assertEqual(
+            message,
+            "generation failed: Source.thy:11: "
+            "unterminated structured proof (missing qed) [lemma broken:]",
+        )
 
 
 class AtomicGenerationTests(unittest.TestCase):

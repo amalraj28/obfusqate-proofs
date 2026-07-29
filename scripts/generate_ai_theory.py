@@ -55,6 +55,17 @@ COMMENT_MARKER = "\0"
 class GenerationError(ValueError):
     """Raised when input cannot be transformed safely."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        line: int | None = None,
+        context: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.line = line
+        self.context = context
+
 
 @dataclass(frozen=True)
 class Token:
@@ -267,6 +278,19 @@ def _line_end(text: str, position: int) -> int:
     return len(text) if newline < 0 else newline
 
 
+def _line_number(text: str, position: int) -> int:
+    return text.count("\n", 0, position) + 1
+
+
+def _line_excerpt(text: str, position: int, limit: int = 120) -> str:
+    start = text.rfind("\n", 0, position) + 1
+    end = _line_end(text, position)
+    excerpt = text[start:end].strip()
+    if len(excerpt) > limit:
+        return excerpt[: limit - 3] + "..."
+    return excerpt
+
+
 def _balanced_by_end(masked: str, start: int, limit: int) -> int:
     pairs = {"(": ")", "[": "]", "{": "}"}
     closing = set(pairs.values())
@@ -333,6 +357,13 @@ def _next_outer_declaration(tokens: list[Token], start_index: int) -> int:
 
 def transform_theory(text: str, output_theory_name: str) -> str:
     """Return a comment-free theory with theorem proofs replaced by ``sorry``."""
+    source_text = text
+    source_tokens = _tokens(_mask_isabelle_literals(source_text))
+    source_theorems = [
+        token
+        for token in source_tokens
+        if token.line_leading and token.value in THEOREM_COMMANDS
+    ]
     text = _strip_isabelle_comments(text)
     masked = _mask_isabelle_literals(text)
     tokens = _tokens(masked)
@@ -354,8 +385,11 @@ def transform_theory(text: str, output_theory_name: str) -> str:
         for index, token in enumerate(tokens)
         if token.line_leading and token.value in THEOREM_COMMANDS
     ]
-    for index in theorem_indices:
+    for theorem_number, index in enumerate(theorem_indices):
         theorem = tokens[index]
+        source_theorem = source_theorems[theorem_number]
+        error_line = _line_number(source_text, source_theorem.start)
+        error_context = _line_excerpt(source_text, source_theorem.start)
         limit = _next_outer_declaration(tokens, index + 1)
         candidate_index = None
         starter_index = None
@@ -369,12 +403,24 @@ def transform_theory(text: str, output_theory_name: str) -> str:
                 starter_index = current
                 break
         if starter_index is None:
-            line = text.count("\n", 0, theorem.start) + 1
-            raise GenerationError(f"theorem at line {line} has no supported proof terminator")
+            raise GenerationError(
+                "theorem has no supported proof terminator",
+                line=error_line,
+                context=error_context,
+            )
 
         proof_start_index = candidate_index if candidate_index is not None else starter_index
         proof_start = tokens[proof_start_index].start
-        proof_end = _proof_end(text, masked, tokens, starter_index, limit)
+        try:
+            proof_end = _proof_end(text, masked, tokens, starter_index, limit)
+        except GenerationError as error:
+            if error.line is not None:
+                raise
+            raise GenerationError(
+                str(error),
+                line=error_line,
+                context=error_context,
+            ) from error
         indent_start = text.rfind("\n", 0, proof_start) + 1
         indent = text[indent_start:proof_start]
         if indent.strip():
