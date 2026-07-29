@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Qiskit ↔ Isabelle DAG Laboratory</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Offline proof demonstrator</p>
+      <h1>Qiskit <span>↔</span> Isabelle DAG Laboratory</h1>
+      <p class="subtitle">See the same circuit edit twice: first as Qiskit performs it, then as the verified Isabelle model specifies it.</p>
+    </div>
+    <div class="header-actions">
+      <button id="sourcesBtn" class="quiet">Sources & terminology</button>
+      <button id="fullscreenBtn" class="quiet">Present ⛶</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="controlDeck" class="control-deck" aria-label="Circuit controls">
+      <div class="control-group setup">
+        <label for="qubitCount">Qubits</label>
+        <div class="compact-row">
+          <input id="qubitCount" type="number" min="1" max="4" step="1" value="3" inputmode="numeric" aria-describedby="qubitLimit">
+          <button id="initializeBtn">Initialize</button>
+        </div>
+        <small id="qubitLimit">1–4 qubits</small>
+      </div>
+
+      <div class="control-group">
+        <span class="label">1 · Choose a gate</span>
+        <div id="gatePalette" class="gate-palette" role="group" aria-label="Gate palette"></div>
+      </div>
+
+      <div class="control-group targets">
+        <label for="qubitTargets">2 · Ordered qubits</label>
+        <input id="qubitTargets" type="text" value="0" placeholder="e.g. 0, 1">
+        <small id="gateHint">H needs 1 distinct qubit.</small>
+      </div>
+
+      <div class="control-group operations">
+        <span class="label">3 · Transform</span>
+        <div class="button-grid">
+          <button id="insertBtn">Insert at back</button>
+          <button id="deleteBtn" class="secondary" disabled>Delete selected</button>
+          <button id="replaceBtn" class="secondary" disabled>Replace selected</button>
+          <button id="substituteBtn" class="secondary" disabled>Replace with mini-DAG</button>
+        </div>
+      </div>
+
+      <div class="control-group presets">
+        <label for="presetSelect">Curated example</label>
+        <select id="presetSelect">
+          <option value="">Choose a walkthrough…</option>
+          <option value="qasm">Provided 4-qubit gate sequence</option>
+          <option value="single">Single-qubit insertion</option>
+          <option value="multi">CNOT then CCNOT</option>
+          <option value="delete">Delete a middle gate</option>
+          <option value="replace">Same-interface replacement</option>
+          <option value="subdag">Replace gate with mini-DAG</option>
+        </select>
+        <div class="compact-row">
+          <button id="exportBtn" class="quiet">Export JSON</button>
+          <label class="file-button">Import JSON<input id="importInput" type="file" accept=".json,application/json"></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="stage-picker" aria-label="Choose an implementation">
+      <div>
+        <p class="eyebrow">Choose one implementation to explain</p>
+        <p>Everything else is dimmed so each graph mutation can be discussed without distraction.</p>
+      </div>
+      <button id="focusQiskit" class="focus-choice qiskit-choice">Explain Qiskit</button>
+      <button id="focusIsabelle" class="focus-choice isabelle-choice">Explain Isabelle</button>
+    </section>
+
+    <section id="playbackBar" class="playback-bar" aria-label="Manual step controls">
+      <div class="manual-badge">Manual steps only</div>
+      <div class="playback-controls">
+        <button id="firstStep" class="icon" aria-label="First step">|‹</button>
+        <button id="prevStep">← Back</button>
+        <button id="nextStep">Next →</button>
+        <button id="lastStep" class="icon" aria-label="Last step">›|</button>
+        <button id="cancelOperation" class="cancel-operation" disabled>Cancel operation</button>
+        <span id="stepCounter">Step 1 of 1</span>
+      </div>
+      <div class="view-controls">
+        <div class="step-jump">
+          <label for="goToStepInput">Go to step</label>
+          <input id="goToStepInput" type="number" min="1" value="1" inputmode="numeric">
+          <button id="goToStepButton" type="button">Go</button>
+        </div>
+        <label>Zoom <input id="zoomRange" type="range" min="75" max="130" value="100"></label>
+      </div>
+    </section>
+
+    <div id="message" class="message" role="status" aria-live="polite"></div>
+
+    <section class="comparison" aria-label="Focused DAG explanation">
+      <article class="implementation-panel qiskit-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Reference implementation · Qiskit 2.4.1</p>
+            <h2>Qiskit DAGCircuit</h2>
+          </div>
+          <div class="panel-heading-actions"><span class="status-chip">documented behavior</span><button class="close-focus" aria-label="Close explanation">×</button></div>
+        </div>
+        <div id="qiskitGraph" class="graph" aria-label="Qiskit DAG graph"></div>
+        <div class="data-grid">
+          <section>
+            <h3>Node table</h3>
+            <div id="qiskitNodes" class="table-wrap"></div>
+          </section>
+          <section>
+            <h3>Wire end-point view <span class="teaching">teaching view</span></h3>
+            <div id="qiskitFrontier" class="table-wrap"></div>
+          </section>
+        </div>
+        <p class="fidelity-note"><strong>Fidelity:</strong> each gate is one operation node. CNOT and CCNOT store ordered qargs on that single node, with several wire edges entering and leaving it. The end-point table is a derived teaching view.</p>
+      </article>
+
+      <article class="implementation-panel isabelle-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Formal model · QuantumCircuit.thy</p>
+            <h2>Isabelle quantum_circuit</h2>
+          </div>
+          <div class="panel-heading-actions"><span class="status-chip verified">proof-linked</span><button class="close-focus" aria-label="Close explanation">×</button></div>
+        </div>
+        <div id="isabelleGraph" class="graph" aria-label="Isabelle circuit DAG graph"></div>
+        <div class="data-grid">
+          <section>
+            <h3>quantum_circuit record</h3>
+            <div id="isabelleNodes" class="table-wrap"></div>
+          </section>
+          <section>
+            <h3>frontier : qubit → node_id <span class="heading-note">(last connected node)</span></h3>
+            <div id="isabelleFrontier" class="table-wrap"></div>
+          </section>
+        </div>
+        <div class="record-strip">
+          <span><b>num_qubits</b> <i id="recordQubits">3</i></span>
+          <span><b>nodes</b> <i id="recordNodes">6 active</i></span>
+          <span><b>edges</b> <i id="recordEdges">3</i></span>
+          <span><b>next_id</b> <i id="recordNext">6</i></span>
+        </div>
+        <p class="fidelity-note isabelle-multi-note"><strong>Multi-qubit operations:</strong> Isabelle also stores CNOT or CCNOT as one <code>OperationNode</code>. Its ordered qubit list identifies controls and target, while the same node is spliced into every affected wire.</p>
+      </article>
+
+      <section class="explanation-grid">
+        <article class="step-card">
+          <p class="eyebrow">Current implementation step</p>
+          <h2 id="stepTitle">An empty circuit is constructed</h2>
+          <p id="stepExplanation"></p>
+          <div id="deltaList" class="delta-list"></div>
+        </article>
+        <article class="proof-card">
+          <p id="proofEyebrow" class="eyebrow">What has been established?</p>
+          <h2 id="proofTitle">The initial circuit is structurally valid</h2>
+          <ul id="proofList"></ul>
+          <details id="theoremDetails">
+            <summary>Relevant Isabelle definitions and theorem names</summary>
+            <div id="theoremNames" class="theorem-names"></div>
+          </details>
+        </article>
+      </section>
+    </section>
+
+    <section class="model-key">
+      <h2>The Isabelle objects, without the syntax</h2>
+      <div class="concepts">
+        <article><b>operation</b><span>A gate name plus its ordered qubit arguments.</span></article>
+        <article><b>circuit_node</b><span>An input boundary, output boundary, or operation.</span></article>
+        <article><b>edge</b><span>A source, target, and the qubit wire connecting them.</span></article>
+        <article><b>quantum_circuit</b><span>Qubit count, node map, edge set, and next unused ID.</span></article>
+        <article><b>frontier</b><span>For every qubit, the last inserted operation—or its input.</span></article>
+        <article><b>subcircuit</b><span>A replacement graph with declared input and output interfaces.</span></article>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="gateReplacementDialog" class="mini-dag-dialog gate-replacement-dialog">
+    <form method="dialog">
+      <button class="dialog-close" value="cancel" aria-label="Close gate replacement">×</button>
+      <p class="eyebrow">Gate replacement</p>
+      <h2>Choose the replacement gate</h2>
+      <p id="replaceGateTarget" class="builder-help"></p>
+      <label for="replaceGateSelect">Replacement gate</label>
+      <select id="replaceGateSelect"></select>
+      <div class="builder-actions">
+        <button id="confirmGateReplacement" type="button">Replace selected gate</button>
+      </div>
+      <p id="replaceGateError" class="builder-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <dialog id="miniDagDialog" class="mini-dag-dialog">
+    <form method="dialog">
+      <button class="dialog-close" value="cancel" aria-label="Close mini-DAG builder">×</button>
+      <p class="eyebrow">Replacement builder</p>
+      <h2>Choose the mini-DAG</h2>
+      <p id="miniDagInterface" class="builder-help"></p>
+      <div class="builder-head"><span>Gate</span><span>Ordered host qubits</span><span></span></div>
+      <div id="miniDagRows" class="mini-dag-rows"></div>
+      <div class="builder-actions">
+        <button id="addMiniDagRow" type="button" class="quiet">+ Add operation</button>
+        <button id="confirmMiniDag" type="button">Use this mini-DAG</button>
+      </div>
+      <p id="miniDagError" class="builder-error" role="alert"></p>
+    </form>
+  </dialog>
+
+  <dialog id="sourcesDialog">
+    <form method="dialog">
+      <button class="dialog-close" aria-label="Close">×</button>
+      <p class="eyebrow">Sources and terminology</p>
+      <h2>What is exact, and what is explanatory?</h2>
+      <h3>Qiskit</h3>
+      <p>The left panel follows the public behavior of <code>apply_operation_back</code>, <code>remove_op_node</code>, <code>substitute_node</code>, and <code>substitute_node_with_dag</code>, pinned for this aid to Qiskit 2.4.1.</p>
+      <p><a href="https://quantum.cloud.ibm.com/docs/en/api/qiskit/qiskit.dagcircuit.DAGCircuit" target="_blank" rel="noreferrer">Official DAGCircuit API ↗</a><br>
+      <a href="https://quantum.cloud.ibm.com/docs/en/guides/DAG-representation" target="_blank" rel="noreferrer">Official DAG representation guide ↗</a></p>
+      <p>The wire end-point table is an explicitly labelled teaching view computed from the visible edges. It is not a public Qiskit record.</p>
+      <h3>Isabelle</h3>
+      <p>The right panel is derived from the records, definitions and proven lemmas in the repository’s <code>QuantumCircuit.thy</code>. The mini-DAG card distinguishes completed results from remaining proof obligations.</p>
+      <h3>Scope</h3>
+      <p>This aid demonstrates symbolic graph transformations. It does not calculate quantum states, amplitudes, or measurement probabilities.</p>
+    </form>
+  </dialog>
+
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

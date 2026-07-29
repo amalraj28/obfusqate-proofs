@@ -1,0 +1,25 @@
+{
+  "qiskit_version": "2.4.1",
+  "provenance": "Regenerate with tools/export_qiskit_fixtures.py in a qiskit==2.4.1 environment.",
+  "normalized_scenarios": {
+    "empty_3": [
+      "q0:input->output",
+      "q1:input->output",
+      "q2:input->output"
+    ],
+    "insert_h_q0": [
+      "q0:input->H",
+      "q0:H->output",
+      "q1:input->output",
+      "q2:input->output"
+    ],
+    "insert_cx_q0_q1_after_h": [
+      "q0:input->H",
+      "q0:H->CNOT",
+      "q0:CNOT->output",
+      "q1:input->CNOT",
+      "q1:CNOT->output",
+      "q2:input->output"
+    ]
+  }
+}
