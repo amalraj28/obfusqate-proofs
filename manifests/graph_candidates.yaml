@@ -1,0 +1,93 @@
+survey:
+  date: "2026-08-05"
+  local_isabelle: "Isabelle2025-2"
+  local_afp: false
+  project_representation:
+    graph: "edge_relation :: quantum_circuit => (node_id * node_id) set"
+    wire_graph: "wire_edge_relation :: quantum_circuit => qubit => (node_id * node_id) set"
+    path: "wire_reaches is membership in the transitive closure (^+)"
+    acyclicity: "is_acyclic_circuit is acyclic (edge_relation circuit)"
+    operations: ["edge set insertion/difference", "record update", "wire reconnection on node deletion", "endpoint renaming preserving wire labels"]
+    absent_from_skeleton: ["topological-order definition", "graph-isomorphism definition"]
+candidates:
+  - id: hol_transitive_closure
+    status: local_verified
+    session: HOL
+    theory: Transitive_Closure
+    imports: [Finite_Set]
+    source: "C:/Users/AMAL/Desktop/Isabelle2025-2/src/HOL/Transitive_Closure.thy"
+    representation: "('a * 'a) set"
+    covers: ["DAGs", "reachability", "paths", "acyclicity", "edge insertion/deletion", "predecessor/successor via converse"]
+    verified_names: ["rtrancl", "trancl", "rtrancl_mono", "trancl_mono_subset", "tranclD", "trancl_insert", "rtrancl_insert", "acyclic", "acyclicI", "acyclic_insert", "acyclic_converse", "acyclic_subset"]
+    fit: direct
+    confidence: high
+  - id: hol_wellfounded
+    status: local_verified
+    session: HOL
+    theory: Wellfounded
+    source: "C:/Users/AMAL/Desktop/Isabelle2025-2/src/HOL/Wellfounded.thy"
+    representation: "('a * 'a) set"
+    covers: ["finite DAGs", "well-founded orders", "topological-order prerequisites", "edge insertion"]
+    verified_names: ["wf_insert", "wf_acyclic", "finite_acyclic_wf", "finite_acyclic_wf_converse", "wf_iff_acyclic_if_finite"]
+    fit: direct_with_finiteness_bridge
+    confidence: high
+  - id: hol_schorrwaite
+    status: local_verified
+    session: HOL
+    theory: Hoare.SchorrWaite
+    source: "C:/Users/AMAL/Desktop/Isabelle2025-2/src/HOL/Hoare/SchorrWaite.thy"
+    representation: "r^* `` A"
+    covers: ["reachability sets", "relation update patterns"]
+    verified_names: ["self_reachable", "oneStep_reachable", "still_reachable", "still_reachable_eq", "reachable_union_sym"]
+    fit: partial
+    confidence: medium
+  - id: afp_graph_theory
+    status: web_only
+    session: Graph_Theory
+    theories: ["Rtrancl_On", "Digraph", "Arc_Walk", "Pair_Digraph", "Vertex_Walk", "Digraph_Isomorphism", "Subdivision"]
+    source: "https://devel.isa-afp.org/entries/Graph_Theory.html"
+    representation: "directed graphs with labelled multi-edges"
+    covers: ["paths", "walks", "subgraphs", "isomorphism", "subdivision"]
+    fit: representation_bridge_required
+    confidence: high
+  - id: afp_graph_algorithms
+    status: web_only
+    session: Graph_Algorithms
+    theories: ["Pair_Graph", "Vwalk", "Pair_Graph_Specs", "DFS", "BFS_2"]
+    imports: ["Main", "Graph-Theory.Rtrancl-On"]
+    source: "https://www.isa-afp.org/browser_info/current/AFP/Graph_Algorithms/document.pdf"
+    representation: "('v * 'v) set"
+    verified_names: ["dVs", "vwalk", "digraph_abs_delete"]
+    covers: ["paths", "successors/neighbourhood", "edge deletion", "DFS/BFS"]
+    fit: bridge_required
+    confidence: medium
+  - id: afp_topological_ordering
+    status: web_only
+    session: Prpu_Maxflow
+    theory: Graph_Topological_Ordering
+    imports: ["Refine_Imperative_HOL.Sepref_Misc", "List_Index.List_Index"]
+    source: "https://www.isa-afp.org/browser_info/current/AFP/Prpu_Maxflow/document.pdf"
+    representation: "binary relation plus list"
+    verified_names: ["is_top_sorted", "is_top_sorted_alt", "is_top_sorted_distinct", "is_top_sorted_antimono", "is_top_sorted_isolated_constraint"]
+    covers: ["topological ordering", "edge deletion", "isolated node insertion"]
+    fit: not_currently_relevant_optional_heavy_dependency
+    confidence: medium
+  - id: afp_graph_saturation
+    status: web_only
+    session: Graph_Saturation
+    theories: ["LabeledGraphs", "RulesAndChains", "GraphRewriting"]
+    source: "https://isa-afp.org/entries/Graph_Saturation.html"
+    representation: "labelled logical graphs and rewrite rules"
+    covers: ["graph rewriting"]
+    fit: domain_mismatch
+    confidence: high
+  - id: afp_relational_paths
+    status: web_only
+    session: Relational_Paths
+    theories: ["More_Relation_Algebra", "Paths", "Rooted_Paths", "Path_Algorithms"]
+    source: "https://devel.isa-afp.org/entries/Relational_Paths.html"
+    representation: "relation algebra with reflexive-transitive closure"
+    verified_names: ["topological_sort_total", "terminating_path"]
+    covers: ["paths", "acyclicity", "topological ordering"]
+    fit: abstract_and_dependency_heavy
+    confidence: medium

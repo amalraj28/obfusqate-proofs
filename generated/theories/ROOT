@@ -1,0 +1,5 @@
+session QuantumCircuit_Reorganized = HOL +
+  options [document = false]
+
+  theories
+    QuantumCircuit
