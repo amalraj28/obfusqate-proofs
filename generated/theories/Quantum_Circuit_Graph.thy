@@ -1,5 +1,5 @@
 theory Quantum_Circuit_Graph
-  imports Quantum_Circuit_Model
+  imports Quantum_Circuit_Data
 
 begin
 
@@ -8,18 +8,15 @@ definition node_exists :: "quantum_circuit \<Rightarrow> node_id \<Rightarrow> b
   "node_exists circuit node_id \<longleftrightarrow>
      nodes circuit node_id \<noteq> None
   "
-
 fun node_uses_qubit :: "circuit_node \<Rightarrow> qubit \<Rightarrow> bool" where
   (* Given a circuit node and a qubit (wire), this function checks whether the circuit node lies on the given qubit wire *)
   "node_uses_qubit (InputNode q) r = (q = r)"
 | "node_uses_qubit (OutputNode q) r = (q = r)"
 | "node_uses_qubit (OperationNode op) r = (r \<in> set (op_qargs op))"
-
 definition qubit_in_circuit :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> bool" where
   (* Given a quantum circuit and a qubit, returns true if the qubit is in the range [0, num_qubits-1] (that is, the qubit is a valid one) *)
   "qubit_in_circuit circuit q \<longleftrightarrow>
      get_qubit_index q < num_qubits circuit"
-
 definition is_well_formed_edge :: "quantum_circuit \<Rightarrow> edge \<Rightarrow> bool" where
   (* An edge is well-formed (valid) iff
       1. The source node exists in the circuit
@@ -43,14 +40,12 @@ definition is_well_formed_edge :: "quantum_circuit \<Rightarrow> edge \<Rightarr
           | None \<Rightarrow> False
       )
   "
-
 definition are_well_formed_edges :: "quantum_circuit \<Rightarrow> bool" where
   (* Checks if all edges present in the quantum circuit are well-formed *)
   "are_well_formed_edges circuit \<longleftrightarrow>
      (\<forall>e \<in> edges circuit. is_well_formed_edge circuit e
      )
   "
-
 definition edge_relation :: "quantum_circuit \<Rightarrow> (node_id \<times> node_id) set" where
   (* Convert the circuit's wire-labelled edges into an ordinary
      directed relation between node IDs.
@@ -68,7 +63,6 @@ definition edge_relation :: "quantum_circuit \<Rightarrow> (node_id \<times> nod
         \<exists>e \<in> edges circuit.
           edge_source e = source_id
         \<and> edge_target e = target_id}"
-
 definition is_acyclic_circuit :: "quantum_circuit \<Rightarrow> bool" where
   (* A circuit is acyclic when its directed node relation contains
      no directed cycle.
@@ -77,7 +71,6 @@ definition is_acyclic_circuit :: "quantum_circuit \<Rightarrow> bool" where
      one or more directed circuit edges from itself.
   *)
   "is_acyclic_circuit circuit \<longleftrightarrow> acyclic (edge_relation circuit)"
-
 definition wire_edge_relation :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> (node_id \<times> node_id) set" where
   (* The directed graph relation formed only by edges carrying qubit q.
 
@@ -91,7 +84,6 @@ definition wire_edge_relation :: "quantum_circuit \<Rightarrow> qubit \<Rightarr
   "wire_edge_relation circuit q =
      {(source_id, target_id).
         make_edge source_id target_id q \<in> edges circuit}"
-
 definition wire_reaches :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> node_id \<Rightarrow> node_id \<Rightarrow> bool" where
   \<comment>\<open> node_a reaches node_b along wire q when there is a non-empty
      directed path of q-labelled edges from node_a to node_b.
@@ -102,21 +94,18 @@ definition wire_reaches :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> no
 
 "wire_reaches circuit q node_a node_b \<longleftrightarrow>
      (node_a, node_b) \<in> (wire_edge_relation circuit q)^+"
-
 definition has_unique_wire_predecessor :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> node_id \<Rightarrow> bool" where
   (* A node has exactly one immediate predecessor on wire q. *)
   "has_unique_wire_predecessor circuit q node_id \<longleftrightarrow>
      (\<exists>! predecessor_id. \<comment>\<open>\<exists>! means exactly one\<close>
         (predecessor_id, node_id)
           \<in> wire_edge_relation circuit q)"
-
 definition has_unique_wire_successor :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> node_id \<Rightarrow> bool" where
   (* A node has exactly one immediate successor on wire q. *)
   "has_unique_wire_successor circuit q node_id \<longleftrightarrow>
      (\<exists>! successor_id. \<comment>\<open>\<exists>! means exactly one\<close>
         (node_id, successor_id)
           \<in> wire_edge_relation circuit q)"
-
 lemma wire_edge_implies_wire_reaches:
   (* A direct q-labelled edge is a path of length one, so its source 
      reaches its target along wire q. *)
@@ -128,7 +117,6 @@ shows
 
   unfolding wire_reaches_def
   using direct_edge by simp
-
 definition nodes_comparable_on_wire :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> bool" where
   (* Every pair of existing nodes that uses wire q must be ordered
      along that wire.
@@ -149,7 +137,6 @@ definition nodes_comparable_on_wire :: "quantum_circuit \<Rightarrow> qubit \<Ri
            \<or> wire_reaches circuit q node_a node_b
            \<or> wire_reaches circuit q node_b node_a
            ))"
-
 definition wire_is_linear :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> bool" where
   (* Wire q forms one directed, non-branching chain.
 
@@ -190,14 +177,12 @@ definition wire_is_linear :: "quantum_circuit \<Rightarrow> qubit \<Rightarrow> 
           \<longrightarrow> node_uses_qubit (OperationNode op) q
           \<longrightarrow> has_unique_wire_predecessor circuit q node_id
           \<and> has_unique_wire_successor circuit q node_id)" \<comment> \<open>If the operation node uses q, it must have exactly one incoming q-edge and exactly one outgoing q-edge\<close>
-
 definition all_wires_linear :: "quantum_circuit \<Rightarrow> bool" where
   (* Every valid qubit wire in the circuit forms one linear chain. *)
   "all_wires_linear circuit \<longleftrightarrow>
      (\<forall>q.
         qubit_in_circuit circuit q
         \<longrightarrow> wire_is_linear circuit q)"
-
 definition all_wire_nodes_comparable :: "quantum_circuit \<Rightarrow> bool" where
   (* Every valid qubit wire in the circuit has a total reachability
      ordering among all existing nodes that use that wire.
@@ -209,7 +194,6 @@ definition all_wire_nodes_comparable :: "quantum_circuit \<Rightarrow> bool" whe
      (\<forall>q.
         qubit_in_circuit circuit q
         \<longrightarrow> nodes_comparable_on_wire circuit q)"
-
 lemma initial_circuit_nodes_comparable_on_wire:
   (* In the initial circuit, the only nodes using a valid wire q are its canonical input node and output node. These two nodes are connected by the initial wire edge, so they are comparable. *)
   assumes valid_qubit:
@@ -413,7 +397,6 @@ proof (intro allI impI)
 
   qed
 qed
-
 lemma initial_circuit_all_wire_nodes_comparable:
   (* Every valid wire in the initial circuit contains only its input and output nodes, connected by the canonical input-to-output edge. Therefore, all nodes using every valid wire are comparable. *)
   "all_wire_nodes_comparable
@@ -432,7 +415,6 @@ proof (intro allI impI)
     using valid_qubit
     by (rule initial_circuit_nodes_comparable_on_wire)
 qed
-
 definition operation_in_circuit :: "quantum_circuit \<Rightarrow> operation \<Rightarrow> bool" where
   (* Checks whether a given operation belongs to the given quantum circuit. An operation belongs to the given circuit iff
       1. The operation itself is valid (correct arity and distinct qubits)
@@ -442,7 +424,6 @@ definition operation_in_circuit :: "quantum_circuit \<Rightarrow> operation \<Ri
       is_valid_operation op
     \<and> (\<forall>q \<in> set (op_qargs op). qubit_in_circuit circuit q)
   "
-
 definition are_well_formed_operation_nodes :: "quantum_circuit \<Rightarrow> bool" where
   (* Checks whether every OperationNode stored in the circuit is well-formed. That is, every operation node must contain an operation that is valid for this circuit.
   *)
@@ -452,7 +433,6 @@ definition are_well_formed_operation_nodes :: "quantum_circuit \<Rightarrow> boo
         operation_in_circuit circuit op
      )
   "
-
 definition are_well_formed_boundary_nodes :: "quantum_circuit \<Rightarrow> bool" where
   (* Checks whether every valid qubit in the circuit has the correct canonical input and output nodes (boundary nodes) *)
 
@@ -466,7 +446,6 @@ definition are_well_formed_boundary_nodes :: "quantum_circuit \<Rightarrow> bool
             = Some (OutputNode (Qubit qubit_number))
      )
   "
-
 definition is_well_formed_circuit :: "quantum_circuit \<Rightarrow> bool" where
   (* A circuit is well-formed iff
       1. Its boundary input/output nodes are well-formed
@@ -478,7 +457,6 @@ definition is_well_formed_circuit :: "quantum_circuit \<Rightarrow> bool" where
      \<and> are_well_formed_edges circuit
      \<and> are_well_formed_operation_nodes circuit
   "
-
 definition is_valid_circuit :: "quantum_circuit \<Rightarrow> bool" where
   (* A structurally valid quantum circuit satisfies every invariant
      established for the DAG representation. *)
@@ -486,7 +464,6 @@ definition is_valid_circuit :: "quantum_circuit \<Rightarrow> bool" where
       is_well_formed_circuit circuit
     \<and> is_acyclic_circuit circuit
     \<and> all_wires_linear circuit"
-
 lemma initial_edges_cases: (* helper lemma *)
   (* Assuming that an edge e belongs to the initial circuit, this proof says that we can always find a qubit `qubit_number` such that the edge e is canonical input-to-output edge for that qubit. Meaning, edge e would always be from some InputNode(q0) to OutputNode(q0), where q0 is a valid qubit.
   *)
@@ -500,7 +477,6 @@ lemma initial_edges_cases: (* helper lemma *)
   using assms
   unfolding initial_circuit_def initial_edges_def
   by auto
-
 lemma initial_edge_relation_cases:
   (* Every source-target pair in the initial circuit relation comes
      from one canonical input-to-output edge of a valid qubit. *)
@@ -539,7 +515,6 @@ proof -
     unfolding make_edge_def
     by simp
 qed
-
 lemma initial_edge_relation_cannot_compose:
   (* Two edges of the initial circuit relation cannot be composed.
 
@@ -575,13 +550,11 @@ proof -
         of "Qubit second_qubit" "Qubit first_qubit"]
     by simp
 qed
-
 lemma initial_circuit_has_no_operation_nodes:(* helper lemma *)
   (* Proves that an initial circuit does not have any operation node  *)
   "nodes (initial_circuit number_of_qubits) node_id \<noteq> Some (OperationNode op)"
   unfolding initial_circuit_def initial_nodes_def
   by (cases node_id; simp split: if_splits)
-
 lemma initial_circuit_is_well_formed:
   (* Proving that the initial empty circuit is a well-formed (valid) circuit *)
   "is_well_formed_circuit (initial_circuit number_of_qubits)"
@@ -634,7 +607,6 @@ proof -
     using boundary edges op_nodes
     by simp
 qed
-
 lemma initial_circuit_is_acyclic:
   (* The initial circuit is acyclic because every edge goes directly
      from an input boundary node to an output boundary node, and output
@@ -730,7 +702,6 @@ proof -
     qed
   qed
 qed
-
 lemma initial_circuit_has_linear_wires:
   (* Every valid wire in the initial circuit consists of exactly one
      directed edge from its canonical input node to its canonical
@@ -1040,6 +1011,397 @@ proof (intro allI impI)
         operation_node_property
       by simp
   qed
+qed
+definition incoming_edge ::
+  "quantum_circuit \<Rightarrow> node_id \<Rightarrow> qubit \<Rightarrow> edge option"
+  where
+    (* Return an edge entering node_id along wire q.
+
+     In a valid linear quantum-circuit wire, such an edge is unique for
+     every non-input node lying on q. If no such edge exists, return None.
+  *)
+  "incoming_edge circuit node_id q =
+     (if \<exists>e \<in> edges circuit.
+          edge_target e = node_id \<and>
+          edge_wire e = q
+      then
+        Some
+          (SOME e.
+             e \<in> edges circuit \<and>
+             edge_target e = node_id \<and>
+             edge_wire e = q)
+      else
+        None)"
+definition outgoing_edge ::
+  "quantum_circuit \<Rightarrow> node_id \<Rightarrow> qubit \<Rightarrow> edge option"
+where
+  (* Return an edge leaving node_id along wire q.
+
+     In a valid linear quantum-circuit wire, such an edge is unique for
+     every non-output node lying on q. If no such edge exists, return None.
+  *)
+  "outgoing_edge circuit node_id q =
+     (if \<exists>e \<in> edges circuit.
+          edge_source e = node_id \<and>
+          edge_wire e = q
+      then
+        Some
+          (SOME e.
+             e \<in> edges circuit \<and>
+             edge_source e = node_id \<and>
+             edge_wire e = q)
+      else
+        None)"
+definition predecessor_on_wire ::
+  "quantum_circuit \<Rightarrow> node_id \<Rightarrow> qubit \<Rightarrow> node_id option"
+where
+  (* Return the source node of the edge entering node_id on wire q. *)
+  "predecessor_on_wire circuit node_id q =
+     map_option edge_source
+       (incoming_edge circuit node_id q)"
+definition successor_on_wire ::
+  "quantum_circuit \<Rightarrow> node_id \<Rightarrow> qubit \<Rightarrow> node_id option"
+where
+  (* Return the target node of the edge leaving node_id on wire q. *)
+  "successor_on_wire circuit node_id q =
+     map_option edge_target
+       (outgoing_edge circuit node_id q)"
+lemma incoming_edge_correct:
+  (* Whenever incoming_edge returns Some e, e belongs to the circuit,
+     enters the requested node, and lies on the requested wire. *)
+  "incoming_edge circuit node_id q = Some e
+   \<Longrightarrow> e \<in> edges circuit
+     \<and> edge_target e = node_id
+     \<and> edge_wire e = q"
+  proof -
+  assume incoming:
+    "incoming_edge circuit node_id q = Some e"
+
+  have edge_exists:
+    "\<exists>candidate.
+       candidate \<in> edges circuit
+       \<and> edge_target candidate = node_id
+       \<and> edge_wire candidate = q"
+  proof (rule ccontr)
+    assume no_edge:
+      "\<not> (\<exists>candidate.
+           candidate \<in> edges circuit
+           \<and> edge_target candidate = node_id
+           \<and> edge_wire candidate = q)"
+
+    then have
+      "incoming_edge circuit node_id q = None"
+      unfolding incoming_edge_def
+      by simp
+
+    with incoming show False
+      by simp
+  qed
+
+  have chosen_edge_correct:
+    "(SOME candidate.
+        candidate \<in> edges circuit
+        \<and> edge_target candidate = node_id
+        \<and> edge_wire candidate = q)
+       \<in> edges circuit
+     \<and> edge_target
+         (SOME candidate.
+            candidate \<in> edges circuit
+            \<and> edge_target candidate = node_id
+            \<and> edge_wire candidate = q)
+         = node_id
+     \<and> edge_wire
+         (SOME candidate.
+            candidate \<in> edges circuit
+            \<and> edge_target candidate = node_id
+            \<and> edge_wire candidate = q)
+         = q"
+    using edge_exists
+    by (rule someI_ex)
+
+  have returned_edge:
+    "e =
+      (SOME candidate.
+         candidate \<in> edges circuit
+         \<and> edge_target candidate = node_id
+         \<and> edge_wire candidate = q)"
+    using
+      incoming
+      edge_exists
+    unfolding incoming_edge_def
+    by (metis (lifting) option.inject)
+
+  show
+    "e \<in> edges circuit
+     \<and> edge_target e = node_id
+     \<and> edge_wire e = q"
+    using chosen_edge_correct returned_edge
+    by simp
+qed
+lemma outgoing_edge_correct:
+  (* Whenever outgoing_edge returns Some e, e belongs to the circuit,
+     leaves the requested node, and lies on the requested wire. *)
+  "outgoing_edge circuit node_id q = Some e
+   \<Longrightarrow> e \<in> edges circuit
+     \<and> edge_source e = node_id
+     \<and> edge_wire e = q"
+
+proof -
+  assume outgoing:
+    "outgoing_edge circuit node_id q = Some e"
+
+  have edge_exists:
+    "\<exists>candidate.
+       candidate \<in> edges circuit
+       \<and> edge_source candidate = node_id
+       \<and> edge_wire candidate = q"
+  proof (rule ccontr)
+    assume no_edge:
+      "\<not> (\<exists>candidate.
+           candidate \<in> edges circuit
+           \<and> edge_source candidate = node_id
+           \<and> edge_wire candidate = q)"
+
+    then have
+      "outgoing_edge circuit node_id q = None"
+      unfolding outgoing_edge_def
+      by simp
+
+    with outgoing show False
+      by simp
+  qed
+
+  have chosen_edge_correct:
+    "(SOME candidate.
+        candidate \<in> edges circuit
+        \<and> edge_source candidate = node_id
+        \<and> edge_wire candidate = q)
+       \<in> edges circuit
+     \<and> edge_source
+         (SOME candidate.
+            candidate \<in> edges circuit
+            \<and> edge_source candidate = node_id
+            \<and> edge_wire candidate = q)
+         = node_id
+     \<and> edge_wire
+         (SOME candidate.
+            candidate \<in> edges circuit
+            \<and> edge_source candidate = node_id
+            \<and> edge_wire candidate = q)
+         = q"
+    using edge_exists
+    by (rule someI_ex)
+
+  have returned_edge:
+    "e =
+      (SOME candidate.
+         candidate \<in> edges circuit
+         \<and> edge_source candidate = node_id
+         \<and> edge_wire candidate = q)"
+    using
+      outgoing
+      edge_exists
+    unfolding outgoing_edge_def
+    by (metis (lifting) option.inject)
+
+  show
+    "e \<in> edges circuit
+     \<and> edge_source e = node_id
+     \<and> edge_wire e = q"
+    using chosen_edge_correct returned_edge
+    by simp
+qed
+lemma predecessor_on_wire_correct:
+  (* Whenever predecessor_on_wire returns Some predecessor, the circuit
+     contains the corresponding predecessor-to-node edge on wire q. *)
+  "predecessor_on_wire circuit node_id q = Some predecessor
+   \<Longrightarrow> make_edge predecessor node_id q \<in> edges circuit"
+
+proof -
+  assume predecessor:
+    "predecessor_on_wire circuit node_id q = Some predecessor"
+
+  show
+    "make_edge predecessor node_id q \<in> edges circuit"
+  proof (cases "incoming_edge circuit node_id q")
+
+    case None
+
+    then have
+      "predecessor_on_wire circuit node_id q = None"
+      unfolding predecessor_on_wire_def
+      by simp
+
+    with predecessor show ?thesis
+      by simp
+
+  next
+    case (Some e)
+
+    have source:
+      "edge_source e = predecessor"
+      using predecessor Some
+      unfolding predecessor_on_wire_def
+      by simp
+
+    have incoming_properties:
+      "e \<in> edges circuit
+       \<and> edge_target e = node_id
+       \<and> edge_wire e = q"
+      using
+        Some
+        incoming_edge_correct
+      by simp
+
+    have edge_identity:
+      "e = make_edge predecessor node_id q"
+      using
+        incoming_properties
+        source
+        make_edge_def
+      by (cases e) simp
+
+    show ?thesis
+      using incoming_properties edge_identity
+      by simp
+
+  qed
+qed
+lemma successor_on_wire_correct:
+  (* Whenever successor_on_wire returns Some successor, the circuit
+     contains the corresponding node-to-successor edge on wire q. *)
+  "successor_on_wire circuit node_id q = Some successor
+   \<Longrightarrow> make_edge node_id successor q \<in> edges circuit"
+
+proof -
+  assume successor:
+    "successor_on_wire circuit node_id q = Some successor"
+
+  show
+    "make_edge node_id successor q \<in> edges circuit"
+
+  proof (cases "outgoing_edge circuit node_id q")
+    case None
+    then have 
+      "successor_on_wire circuit node_id q = None"
+      unfolding successor_on_wire_def
+      by simp
+
+    with successor show ?thesis
+      by simp
+
+  next
+    case (Some e)
+
+    have target:
+      "edge_target e = successor"
+      using successor Some
+      unfolding successor_on_wire_def
+      by simp
+
+    have outgoing_properties:
+      "e \<in> edges circuit
+       \<and> edge_source e = node_id
+       \<and> edge_wire e = q"
+      using
+        Some
+        outgoing_edge_correct
+      by simp
+
+    have edge_identity:
+      "e = make_edge node_id successor q"
+      using
+        outgoing_properties
+        target
+        make_edge_def
+      by (cases e) simp
+      
+    show ?thesis
+      using
+        outgoing_properties
+        edge_identity
+      by simp
+  qed
+qed
+lemma predecessor_on_wire_not_self:
+  assumes acyclic:
+    "is_acyclic_circuit circuit"
+
+  assumes predecessor:
+    "predecessor_on_wire circuit node_id q =
+       Some predecessor_node"
+
+  shows
+    "predecessor_node \<noteq> node_id"
+proof
+
+  assume predecessor_eq:
+    "predecessor_node = node_id"
+
+  have self_loop_edge:
+    "make_edge node_id node_id q \<in> edges circuit"
+    using
+      predecessor_on_wire_correct[OF predecessor]
+      predecessor_eq
+    by simp
+
+  have self_loop_relation:
+    "(node_id, node_id) \<in> edge_relation circuit"
+    using self_loop_edge
+    unfolding
+      edge_relation_def
+      make_edge_def
+    by force
+
+  have self_reachable:
+    "(node_id, node_id) \<in> (edge_relation circuit)\<^sup>+"
+    using self_loop_relation
+    by (rule r_into_trancl)
+
+  show False
+    using acyclic self_reachable
+    unfolding is_acyclic_circuit_def
+    by (simp add: acyclic_def)
+qed
+lemma successor_on_wire_not_self:
+  assumes acyclic:
+    "is_acyclic_circuit circuit"
+
+  assumes successor:
+    "successor_on_wire circuit node_id q =
+       Some successor_node"
+
+  shows
+    "successor_node \<noteq> node_id"
+proof
+
+  assume successor_eq:
+    "successor_node = node_id"
+
+  have self_loop_edge:
+    "make_edge node_id node_id q \<in> edges circuit"
+    using
+      successor_on_wire_correct[OF successor]
+      successor_eq
+    by simp
+
+  have self_loop_relation:
+    "(node_id, node_id) \<in> edge_relation circuit"
+    using self_loop_edge
+    unfolding
+      edge_relation_def
+      make_edge_def
+    by force
+
+  have self_reachable:
+    "(node_id, node_id) \<in> (edge_relation circuit)\<^sup>+"
+    using self_loop_relation
+    by (rule r_into_trancl)
+
+  show False
+    using acyclic self_reachable
+    unfolding is_acyclic_circuit_def
+    by (simp add: acyclic_def)
 qed
 
 end

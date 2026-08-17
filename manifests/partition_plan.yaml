@@ -1,314 +1,151 @@
-schema_version: 1
-stage: 4
-status: approved_stage_4_skeleton_extraction
+schema_version: 2
+stage: consolidated_feature_architecture
+status: implemented
 
 inputs:
+  authoritative_theory:
+    path: QuantumCircuit.thy
+    sha256: 124d16dcd78b621ac1c0d2e7a94638ae83401b001007aa96a7eabe582fa77813
+    immutable: true
+    git_source_commit: cf1a3859fc8f04cbf197807f75442691302e9067
+  authoritative_copy:
+    path: work/QuantumCircuit_authoritative_copy.thy
+    sha256: 124d16dcd78b621ac1c0d2e7a94638ae83401b001007aa96a7eabe582fa77813
   skeleton:
     path: work/QuantumCircuit_Skeleton_work.thy
     sha256: 19be416dd8983c90ec7c968f392f3d491c301f7fe0481b7afb8fc57d47dd017b
   source_map:
     path: manifests/source_map.json
     sha256: e3299be7c87c0fab7f9ae0dcf9a89af909448da423a89463063945daaf0809d2
-  authoritative_theory:
-    path: QuantumCircuit.thy
-    immutable: true
-    git_head: cf1a3859fc8f04cbf197807f75442691302e9067
+    command_count: 321
+    validation_status: passed
 
 preservation_rules:
-  content_commands: exact_text
+  content_commands: exact_authoritative_text_in_proved_theories
+  skeleton_commands: exact_statement_text_with_proof_body_sorry
   theorem_names: unchanged
   theorem_statements: unchanged
   theorem_assumptions: unchanged
   theorem_attributes: unchanged
-  definition_names_and_equations: unchanged
-  command_order_within_each_partition: source_order
-  proof_placeholders_at_stage_4: sorry
-  source_structural_commands: represented_as_metadata
-  source_trivia: >-
-    Attach blank lines and comments immediately preceding a command to that
-    command; preserve trivia inside commands verbatim. Attach final trailing
-    trivia to source command 321. No block comments or text commands occur in
-    the current skeleton; command 215 is the sole section command.
-  generated_headers: >-
-    Theory/import/begin/end syntax required for each output file is structural
-    synthesis, not a content-command edit. Source structural commands 1-3 and
-    321 are represented as metadata only; generated headers and wrappers are
-    always synthesized and never copied verbatim.
-
-source_inventory:
-  command_count: 321
-  first_command_id: 1
-  last_command_id: 321
-  structural_command_ids: [1, 2, 3, 321]
-  content_command_count: 317
-  content_command_ids: "4..320"
-
-output_order:
-  - Quantum_Circuit_Model
-  - Quantum_Circuit_Graph
-  - Quantum_Circuit_Construction
-  - Quantum_Circuit_Wire_Splice
-  - Quantum_Circuit_Insert_Core
-  - Quantum_Circuit_Insert_Validity
-  - Quantum_Circuit_Navigation
-  - Quantum_Circuit_Delete_Core
-  - Quantum_Circuit_Delete_Validity
-  - Quantum_Circuit_Operation_Replace
-  - Quantum_Circuit_Subcircuit_Model
-  - Quantum_Circuit_Subcircuit_Edit
-  - Quantum_Circuit_Subcircuit_Connect
-  - Quantum_Circuit_Subcircuit_Replace_Core
-  - Quantum_Circuit_Subcircuit_Replace_Acyclicity
-  - Quantum_Circuit_Examples
-  - QuantumCircuit_Skeleton
+  definitions_and_equations: unchanged
+  interpretations: preserved_and_proof_restored
+  source_structural_commands: represented_as_synthetic_metadata
+  prohibited_in_proved: [sorry, oops, axiomatization, oracle, skip_proof]
 
 theories:
-  - theory_name: Quantum_Circuit_Model
-    output_file: generated/skeleton/Quantum_Circuit_Model.thy
-    role: core datatypes, circuit representation, identifiers, and initial circuit
+  - theory_name: Quantum_Circuit_Data
+    output_file: generated/theories/Quantum_Circuit_Data.thy
+    skeleton_file: generated/skeleton/Quantum_Circuit_Data.thy
     imports: [Complex_Main]
-    owned_command_intervals: [[4, 30]]
+    role: datatypes, records, identifiers, and initial circuit
+    command_ids: "4..30"
     command_count: 27
-    authoritative_lines: [6, 210]
-    first_command: {id: 4, kind: datatype, name: qubit}
-    last_command: {id: 30, kind: lemma, name: make_edges_on_different_wires_unequal}
 
   - theory_name: Quantum_Circuit_Graph
-    output_file: generated/skeleton/Quantum_Circuit_Graph.thy
-    role: edge relations, reachability, wire linearity, circuit validity, and initial validity
-    imports: [Quantum_Circuit_Model]
-    owned_command_intervals: [[31, 60]]
-    command_count: 30
-    authoritative_lines: [217, 1264]
-    first_command: {id: 31, kind: definition, name: node_exists}
-    last_command: {id: 60, kind: lemma, name: initial_circuit_has_linear_wires}
+    output_file: generated/theories/Quantum_Circuit_Graph.thy
+    skeleton_file: generated/skeleton/Quantum_Circuit_Graph.thy
+    imports: [Quantum_Circuit_Data]
+    role: graph invariants, reachability, validity, and navigation
+    command_ids: ["31..60", "131..140"]
+    command_count: 40
 
-  - theory_name: Quantum_Circuit_Construction
-    output_file: generated/skeleton/Quantum_Circuit_Construction.thy
-    role: node allocation, frontiers, primitive edits, and construction-state invariants
+  - theory_name: Quantum_Circuit_State
+    output_file: generated/theories/Quantum_Circuit_State.thy
+    skeleton_file: generated/skeleton/Quantum_Circuit_State.thy
     imports: [Quantum_Circuit_Graph]
-    owned_command_intervals: [[61, 85]]
+    role: construction state, frontier, allocation, and primitive graph edits
+    command_ids: "61..85"
     command_count: 25
-    authoritative_lines: [1272, 1725]
-    first_command: {id: 61, kind: definition, name: increment_node_id}
-    last_command: {id: 85, kind: lemma, name: initial_existing_node_ids_are_below_next_id}
 
-  - theory_name: Quantum_Circuit_Wire_Splice
-    output_file: generated/skeleton/Quantum_Circuit_Wire_Splice.thy
-    role: single-wire splicing and preservation of wire reachability and comparability
-    imports: [Quantum_Circuit_Construction]
-    owned_command_intervals: [[86, 104]]
-    command_count: 19
-    authoritative_lines: [1729, 2506]
-    first_command: {id: 86, kind: definition, name: splice_wire_without_updating_frontier}
-    last_command: {id: 104, kind: lemma, name: old_nodes_comparable_after_splice}
+  - theory_name: Quantum_Circuit_Insertion
+    output_file: generated/theories/Quantum_Circuit_Insertion.thy
+    skeleton_file: generated/skeleton/Quantum_Circuit_Insertion.thy
+    imports: [Quantum_Circuit_State]
+    role: wire splicing and operation insertion implementation and supporting proofs
+    command_ids: ["86..128", 130]
+    command_count: 44
+    public_theorem_moved_to_main: 129
 
-  - theory_name: Quantum_Circuit_Insert_Core
-    output_file: generated/skeleton/Quantum_Circuit_Insert_Core.thy
-    role: multi-wire splicing, operation insertion, and construction-state preservation
-    imports: [Quantum_Circuit_Wire_Splice]
-    owned_command_intervals: [[105, 119]]
-    command_count: 15
-    authoritative_lines: [2508, 4807]
-    first_command: {id: 105, kind: fun, name: splice_wires}
-    last_command: {id: 119, kind: lemma, name: insert_operation_preserves_valid_construction_state}
+  - theory_name: Quantum_Circuit_Deletion
+    output_file: generated/theories/Quantum_Circuit_Deletion.thy
+    skeleton_file: generated/skeleton/Quantum_Circuit_Deletion.thy
+    imports: [Quantum_Circuit_State]
+    role: wire reconnection and operation deletion implementation and supporting proofs
+    command_ids: "141..194"
+    command_count: 54
+    public_theorem_moved_to_main: 195
 
-  - theory_name: Quantum_Circuit_Insert_Validity
-    output_file: generated/skeleton/Quantum_Circuit_Insert_Validity.thy
-    role: insertion preservation of reachability, linearity, acyclicity, and full validity
-    imports: [Quantum_Circuit_Insert_Core]
-    owned_command_intervals: [[120, 130]]
-    command_count: 11
-    authoritative_lines: [4809, 8283]
-    first_command: {id: 120, kind: lemma, name: wire_node_reaches_frontier_or_is_output}
-    last_command: {id: 130, kind: lemma, name: initial_construction_state_is_valid}
+  - theory_name: Quantum_Circuit_Replacement
+    output_file: generated/theories/Quantum_Circuit_Replacement.thy
+    skeleton_file: generated/skeleton/Quantum_Circuit_Replacement.thy
+    imports: [Quantum_Circuit_State]
+    role: same-operation replacement and partial subcircuit replacement
+    command_ids: ["196..213", "215..318"]
+    command_count: 122
+    public_theorem_moved_to_main: 214
+    subcircuit_contract: well_formedness_and_acyclicity_only
 
-  - theory_name: Quantum_Circuit_Navigation
-    output_file: generated/skeleton/Quantum_Circuit_Navigation.thy
-    role: incoming/outgoing edge lookup and wire predecessor/successor operations
-    imports: [Quantum_Circuit_Insert_Validity]
-    owned_command_intervals: [[131, 140]]
-    command_count: 10
-    authoritative_lines: [8289, 8688]
-    first_command: {id: 131, kind: definition, name: incoming_edge}
-    last_command: {id: 140, kind: lemma, name: successor_on_wire_not_self}
-
-  - theory_name: Quantum_Circuit_Delete_Core
-    output_file: generated/skeleton/Quantum_Circuit_Delete_Core.thy
-    role: wire reconnection, operation deletion, structural effects, and well-formedness
-    imports: [Quantum_Circuit_Navigation]
-    owned_command_intervals: [[141, 171]]
-    command_count: 31
-    authoritative_lines: [8694, 11915]
-    first_command: {id: 141, kind: definition, name: reconnect_wire}
-    last_command: {id: 171, kind: lemma, name: delete_operation_preserves_well_formed_circuit}
-
-  - theory_name: Quantum_Circuit_Delete_Validity
-    output_file: generated/skeleton/Quantum_Circuit_Delete_Validity.thy
-    role: deletion preservation of reachability, degrees, acyclicity, linearity, and validity
-    imports: [Quantum_Circuit_Delete_Core]
-    owned_command_intervals: [[172, 195]]
-    command_count: 24
-    authoritative_lines: [11917, 15377]
-    first_command: {id: 172, kind: lemma, name: delete_operation_reachability_preserved}
-    last_command: {id: 195, kind: lemma, name: delete_operation_preserves_valid_circuit}
-
-  - theory_name: Quantum_Circuit_Operation_Replace
-    output_file: generated/skeleton/Quantum_Circuit_Operation_Replace.thy
-    role: same-node operation replacement and preservation of circuit validity
-    imports: [Quantum_Circuit_Delete_Validity]
-    owned_command_intervals: [[196, 214]]
-    command_count: 19
-    authoritative_lines: [15381, 16744]
-    first_command: {id: 196, kind: definition, name: is_operation_node_id}
-    last_command: {id: 214, kind: lemma, name: replacement_preserves_valid_circuit}
-
-  - theory_name: Quantum_Circuit_Subcircuit_Model
-    output_file: generated/skeleton/Quantum_Circuit_Subcircuit_Model.thy
-    role: subcircuit interfaces, validity, compatibility, renaming, and renaming facts
-    imports: [Quantum_Circuit_Operation_Replace]
-    owned_command_intervals: [[215, 244]]
-    command_count: 30
-    authoritative_lines: [16748, 17282]
-    first_command: {id: 215, kind: section, name: "\\<open>Subcircuit Replacement\\<close>"}
-    last_command: {id: 244, kind: lemma, name: renamed_subcircuit_edge_target}
-
-  - theory_name: Quantum_Circuit_Subcircuit_Edit
-    output_file: generated/skeleton/Quantum_Circuit_Subcircuit_Edit.thy
-    role: removal of the old node and insertion of renamed nodes and internal edges
-    imports: [Quantum_Circuit_Subcircuit_Model]
-    owned_command_intervals: [[245, 270]]
-    command_count: 26
-    authoritative_lines: [17284, 17816]
-    first_command: {id: 245, kind: definition, name: remove_operation_node}
-    last_command: {id: 270, kind: lemma, name: insert_subcircuit_internal_edges_preserves_next_id}
-
-  - theory_name: Quantum_Circuit_Subcircuit_Connect
-    output_file: generated/skeleton/Quantum_Circuit_Subcircuit_Connect.thy
-    role: input/output interface connection, fold interpretations, and frontier update
-    imports: [Quantum_Circuit_Subcircuit_Edit]
-    owned_command_intervals: [[271, 294]]
-    command_count: 24
-    authoritative_lines: [17818, 18707]
-    first_command: {id: 271, kind: definition, name: connect_subcircuit_input_on_wire}
-    last_command: {id: 294, kind: lemma, name: update_frontier_after_subcircuit_no_output_interface}
-    scope_constraints:
-      - command_ids: [277, 278, 279, 280]
-        reason: keep connect_subcircuit_input interpretation with its commutativity proof and consumers
-      - command_ids: [287, 288, 289]
-        reason: keep connect_subcircuit_output interpretation with its commutativity proof and consumer
-
-  - theory_name: Quantum_Circuit_Subcircuit_Replace_Core
-    output_file: generated/skeleton/Quantum_Circuit_Subcircuit_Replace_Core.thy
-    role: replacement construction and preservation of nodes, edges, boundaries, and well-formedness
-    imports: [Quantum_Circuit_Subcircuit_Connect]
-    owned_command_intervals: [[295, 312]]
-    command_count: 18
-    authoritative_lines: [18709, 22704]
-    first_command: {id: 295, kind: definition, name: replace_operation_by_subcircuit}
-    last_command: {id: 312, kind: lemma, name: replace_operation_by_subcircuit_preserves_well_formed_circuit}
-
-  - theory_name: Quantum_Circuit_Subcircuit_Replace_Acyclicity
-    output_file: generated/skeleton/Quantum_Circuit_Subcircuit_Replace_Acyclicity.thy
-    role: cycle reflection, cycle classification, and replacement acyclicity
-    imports: [Quantum_Circuit_Subcircuit_Replace_Core]
-    owned_command_intervals: [[313, 318]]
-    command_count: 6
-    authoritative_lines: [22707, 24101]
-    first_command: {id: 313, kind: lemma, name: valid_subcircuit_replacement_is_acyclic}
-    last_command: {id: 318, kind: lemma, name: replace_operation_by_subcircuit_preserves_acyclicity}
+  - theory_name: QuantumCircuit
+    skeleton_theory_name: QuantumCircuit_Skeleton
+    output_file: generated/theories/QuantumCircuit.thy
+    skeleton_file: generated/skeleton/QuantumCircuit_Skeleton.thy
+    imports:
+      - Quantum_Circuit_Insertion
+      - Quantum_Circuit_Deletion
+      - Quantum_Circuit_Replacement
+    role: public proof entry point
+    command_ids: [129, 195, 214]
+    command_count: 3
+    public_theorems:
+      - insert_operation_preserves_valid_quantum_circuit
+      - delete_operation_preserves_valid_circuit
+      - replacement_preserves_valid_circuit
 
   - theory_name: Quantum_Circuit_Examples
-    output_file: generated/skeleton/Quantum_Circuit_Examples.thy
-    role: example operation values
-    imports: [Quantum_Circuit_Subcircuit_Replace_Acyclicity]
-    owned_command_intervals: [[319, 320]]
+    output_file: generated/theories/Quantum_Circuit_Examples.thy
+    skeleton_file: generated/skeleton/Quantum_Circuit_Examples.thy
+    imports: [QuantumCircuit]
+    skeleton_imports: [QuantumCircuit_Skeleton]
+    role: examples downstream of the public entry point
+    command_ids: [319, 320]
     command_count: 2
-    authoritative_lines: [24107, 24114]
-    first_command: {id: 319, kind: definition, name: ex_h_q0}
-    last_command: {id: 320, kind: definition, name: ex_cnot_q0_q1}
 
-  - theory_name: QuantumCircuit_Skeleton
-    output_file: generated/skeleton/QuantumCircuit_Skeleton.thy
-    role: stage-4 skeleton wrapper; owner of represented original-theory metadata
-    imports: [Quantum_Circuit_Examples]
-    owned_command_intervals: [[1, 3], [321, 321]]
-    command_count: 4
-    authoritative_lines: [1, 4, 24116, 24116]
-    noncontiguous_range_justification: >-
-      Commands 1 (theory), 2 (imports), 3 (begin), and 321 (end) delimit the
-      original monolithic theory. They become wrapper metadata. Complex_Main
-      moves to the first content theory and remains a transitive import; every
-      generated content theory receives a synthetic header and end command.
-    commands:
-      - {id: 1, kind: theory, name: QuantumCircuit, disposition: wrapper_theory_header}
-      - {id: 2, kind: imports, name: Complex_Main, disposition: base_import_and_transitive_wrapper_import}
-      - {id: 3, kind: begin, name: null, disposition: wrapper_begin}
-      - {id: 321, kind: end, name: null, disposition: wrapper_end}
-
-future_proved_compatibility_wrapper:
-  output_file: generated/theories/QuantumCircuit.thy
-  theory_name: QuantumCircuit
-  imports: [Quantum_Circuit_Examples]
-  generation_stage: 5
-  purpose: >-
-    Synthesized proved compatibility wrapper importing the final generated
-    content theory. It does not copy source theory/imports/begin/end commands.
-  authoritative_root:
-    path: QuantumCircuit.thy
-    immutable: true
-  source_structural_commands: [1, 2, 3, 321]
-
-import_dag:
-  roots: [Complex_Main]
-  edges:
-    - [Complex_Main, Quantum_Circuit_Model]
-    - [Quantum_Circuit_Model, Quantum_Circuit_Graph]
-    - [Quantum_Circuit_Graph, Quantum_Circuit_Construction]
-    - [Quantum_Circuit_Construction, Quantum_Circuit_Wire_Splice]
-    - [Quantum_Circuit_Wire_Splice, Quantum_Circuit_Insert_Core]
-    - [Quantum_Circuit_Insert_Core, Quantum_Circuit_Insert_Validity]
-    - [Quantum_Circuit_Insert_Validity, Quantum_Circuit_Navigation]
-    - [Quantum_Circuit_Navigation, Quantum_Circuit_Delete_Core]
-    - [Quantum_Circuit_Delete_Core, Quantum_Circuit_Delete_Validity]
-    - [Quantum_Circuit_Delete_Validity, Quantum_Circuit_Operation_Replace]
-    - [Quantum_Circuit_Operation_Replace, Quantum_Circuit_Subcircuit_Model]
-    - [Quantum_Circuit_Subcircuit_Model, Quantum_Circuit_Subcircuit_Edit]
-    - [Quantum_Circuit_Subcircuit_Edit, Quantum_Circuit_Subcircuit_Connect]
-    - [Quantum_Circuit_Subcircuit_Connect, Quantum_Circuit_Subcircuit_Replace_Core]
-    - [Quantum_Circuit_Subcircuit_Replace_Core, Quantum_Circuit_Subcircuit_Replace_Acyclicity]
-    - [Quantum_Circuit_Subcircuit_Replace_Acyclicity, Quantum_Circuit_Examples]
-    - [Quantum_Circuit_Examples, QuantumCircuit_Skeleton]
-  acyclic: true
-  dependency_policy: >-
-    The content theories form a source-order chain. This deliberately preserves
-    every implicit dependency, theorem attribute, interpretation, and namespace
-    effect without attempting speculative dependency minimisation.
+structural_metadata:
+  source_command_ids: [1, 2, 3, 321]
+  disposition: synthetic_theory_import_begin_end_commands
 
 inventory_validation:
-  method: >-
-    Expand every owned_command_intervals pair inclusively. Require each interval
-    to be ordered, require the expanded multiset to equal integers 1 through
-    321, and compare every recorded endpoint kind/name/authoritative line with
-    manifests/source_map.json.
-  declared_interval_count: 18
-  expanded_assignment_count: 321
-  unique_assignment_count: 321
-  expected_command_ids: "1..321"
+  content_command_count: 317
+  assignment_count: 317
+  unique_assignment_count: 317
+  expected_command_ids: "4..320"
   missing_command_ids: []
   duplicate_command_ids: []
-  out_of_range_command_ids: []
-  endpoint_mismatches: []
-  source_map_validation_status: passed
-  partition_inventory_status: passed
+  source_map_command_count: 321
+  proof_bearing_command_count: 223
+  interpretation_command_ids: [278, 288]
+  status: passed
 
-stage_4_gate:
-  approved: true
-  authorized_action: partition_skeleton_only
-  immutable_files: [QuantumCircuit.thy, QuantumCircuit_Skeleton.thy]
+import_dag:
+  edges:
+    - [Complex_Main, Quantum_Circuit_Data]
+    - [Quantum_Circuit_Data, Quantum_Circuit_Graph]
+    - [Quantum_Circuit_Graph, Quantum_Circuit_State]
+    - [Quantum_Circuit_State, Quantum_Circuit_Insertion]
+    - [Quantum_Circuit_State, Quantum_Circuit_Deletion]
+    - [Quantum_Circuit_State, Quantum_Circuit_Replacement]
+    - [Quantum_Circuit_Insertion, QuantumCircuit]
+    - [Quantum_Circuit_Deletion, QuantumCircuit]
+    - [Quantum_Circuit_Replacement, QuantumCircuit]
+    - [QuantumCircuit, Quantum_Circuit_Examples]
+  acyclic: true
 
-stage_5_constraints:
-  restore_proof_bearing_outer_commands: [lemma, theorem, corollary, proposition, interpretation]
-  subcircuit_replacement_validity: >-
-    Do not claim full valid-circuit preservation for subcircuit replacement
-    unless a corresponding theorem exists in the source inventory.
+sessions:
+  proved:
+    root: generated/theories/ROOT
+    name: QuantumCircuit_Reorganized
+    terminal_theory: Quantum_Circuit_Examples
+  skeleton:
+    root: generated/skeleton/ROOT
+    name: QuantumCircuit_Reorganized_Skeleton
+    terminal_theory: Quantum_Circuit_Examples

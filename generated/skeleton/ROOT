@@ -1,4 +1,4 @@
-session QuantumCircuit_Reorganized = HOL +
+session QuantumCircuit_Reorganized_Skeleton = HOL +
   options [document = false]
 
   theories
