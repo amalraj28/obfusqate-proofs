@@ -6,38 +6,45 @@ begin
 definition increment_node_id :: "node_id \<Rightarrow> node_id" where
   (* Given a node ID, return the next node ID (Add 1 to it) *)
   "increment_node_id current_node_id = NodeId (node_id_to_nat current_node_id + 1)"
+
 lemma node_id_to_nat_increment_node_id[simp]:
   (* The next node id is 1 more than the present node id *)
   "node_id_to_nat (increment_node_id current_node_id) = node_id_to_nat current_node_id + 1"
   unfolding increment_node_id_def
   by (cases current_node_id; simp)
+
 lemma increment_node_id_not_same[simp]:
   (* Node id before and after increment are not same *)
   "increment_node_id current_node_id \<noteq> current_node_id"
   unfolding increment_node_id_def
   by (cases current_node_id; simp)
+
 type_synonym frontier = "qubit \<Rightarrow> node_id" (* Frontier is a mapping from qubit \<Rightarrow> node_id, where node_id means the last operation encountered on this qubit *)
+
 definition initial_frontier :: frontier where
   (* Initially, frontier (map) would be from qubit to its input node (since circuit is empty) *)
   "initial_frontier q = get_input_node_id q"
+
 definition update_frontier :: "frontier \<Rightarrow> qubit \<Rightarrow> node_id \<Rightarrow> frontier" where
   (* Updating frontier for a qubit q means that we are updating the existing entry of the qubit q in the map with the id of the new node *)
   "update_frontier frontier q new_node_id = frontier(q := new_node_id)"
+
 lemma update_frontier_same[simp]:
   (* If you look up qubit q after updating the frontier entry for q, you will get the newly supplied node ID *)
   "update_frontier frontier q new_node_id q = new_node_id"
   unfolding update_frontier_def
   by simp
+
 lemma update_frontier_other[simp]:
   (* Updating the frontier for q does not change the frontier entry
      of any different qubit other_q. *)
   assumes "other_q \<noteq> q"
   shows
-    "update_frontier frontier q new_node_id other_q =
-     frontier other_q"
+    "update_frontier frontier q new_node_id other_q = frontier other_q"
   using assms
   unfolding update_frontier_def
   by simp
+
 definition is_valid_frontier :: "quantum_circuit \<Rightarrow> frontier \<Rightarrow> bool" where
   (* A frontier is valid when, for every valid qubit:
        1. the frontier points to an existing node on that wire, and
@@ -57,9 +64,11 @@ definition is_valid_frontier :: "quantum_circuit \<Rightarrow> frontier \<Righta
            \<in> edges circuit
          \<and> has_unique_wire_successor
              circuit q (frontier q)))"
+
 definition next_id_is_unused :: "quantum_circuit \<Rightarrow> bool" where
   (* The circuit's next_id is unused when no node is currently stored at that ID. This prevents the next insertion from overwriting an existing node *)
   "next_id_is_unused circuit \<longleftrightarrow> nodes circuit (next_id circuit) = None"
+
 definition all_existing_node_ids_below_next_id ::
   "quantum_circuit \<Rightarrow> bool"
   where
@@ -75,9 +84,8 @@ definition all_existing_node_ids_below_next_id ::
     "all_existing_node_ids_below_next_id circuit \<longleftrightarrow>
      (\<forall>existing_node_id.
         nodes circuit existing_node_id \<noteq> None
-        \<longrightarrow>
-        node_id_to_nat existing_node_id
-          < node_id_to_nat (next_id circuit))"
+        \<longrightarrow> node_id_to_nat existing_node_id < node_id_to_nat (next_id circuit))"
+
 definition is_valid_construction_state :: "quantum_circuit \<Rightarrow> frontier \<Rightarrow> bool" where
   (* A circuit and frontier form a valid construction state when:
        1. the circuit is structurally well formed;
@@ -90,37 +98,43 @@ definition is_valid_construction_state :: "quantum_circuit \<Rightarrow> frontie
         \<and> is_valid_frontier circuit frontier
         \<and> next_id_is_unused circuit
         \<and> all_existing_node_ids_below_next_id circuit"
+
 definition insert_node :: "node_id \<Rightarrow> circuit_node \<Rightarrow> quantum_circuit \<Rightarrow> quantum_circuit" where
   (* Add or replace the node stored at the given node ID. *)
   "insert_node node_id new_node circuit =
      circuit\<lparr>nodes := (nodes circuit)(node_id := Some new_node)\<rparr>" (* create a new function exactly like "nodes circuit", except at "NodeId 2", return "Some new_node" *)
+
 definition insert_edge :: "edge \<Rightarrow> quantum_circuit \<Rightarrow> quantum_circuit" where
   (* Add an edge to the circuit. *)
   "insert_edge e circuit =
      circuit\<lparr>edges := insert e (edges circuit)\<rparr>" (* Circuit where everything else is same, except that edges is now the union of old edge set with the new edge inserted *)
+
 definition delete_edge :: "edge \<Rightarrow> quantum_circuit \<Rightarrow> quantum_circuit" where
   (* Remove an edge from the circuit. *)
   "delete_edge e circuit =
      circuit\<lparr>edges := edges circuit - {e}\<rparr>" (* Circuit where everything else is same, except that edges is the difference of old edges and set (new edge) *)
+
 lemma nodes_insert_node_same[simp]: (* helper lemma *)
   (* After insertion, if you lookup at the inserted node id, you would get the new inserted node *)
   "nodes (insert_node node_id node circuit) node_id = Some node"
   unfolding insert_node_def
   by simp
+
 lemma valid_frontier_has_unique_successor:
   (* A valid frontier is the final node immediately before the output
      node, so it has exactly one successor on its wire. *)
   assumes valid_frontier:
     "is_valid_frontier circuit frontier"
 
-assumes valid_q:
-  "qubit_in_circuit circuit q"
+  assumes valid_q:
+    "qubit_in_circuit circuit q"
+  shows
+    "has_unique_wire_successor circuit q (frontier q)"
 
-shows
-  "has_unique_wire_successor circuit q (frontier q)"
   using valid_frontier valid_q
   unfolding is_valid_frontier_def
   by blast
+
 lemma nodes_insert_node_other[simp]: (* helper lemma *)
   (* All other node ids apart from the one where insertion happen, remain unchanged *)
   assumes "other_node_id \<noteq> node_id"
@@ -129,6 +143,7 @@ lemma nodes_insert_node_other[simp]: (* helper lemma *)
   using assms
   unfolding insert_node_def
   by simp
+
 lemma insert_node_at_unused_id_preserves_valid_frontier:
   (* Storing a new node at an unused node ID preserves frontier validity.
 
@@ -137,14 +152,12 @@ lemma insert_node_at_unused_id_preserves_valid_frontier:
   assumes valid_frontier: "is_valid_frontier circuit frontier"
     (* Assume the circuit already has a correct frontier. This is the property we want to preserve. *)
 
-assumes node_id_unused: "nodes circuit new_node_id = None"
-  (* Assume this node ID is currently unused. We are inserting into an empty location, not replacing an existing node. *)
+  assumes node_id_unused: "nodes circuit new_node_id = None"
+    (* Assume this node ID is currently unused. We are inserting into an empty location, not replacing an existing node. *)
 
-shows
-  "is_valid_frontier 
-         (insert_node new_node_id new_node circuit)
-         frontier"
-  (* Shows that after inserting the new node, the exact same frontier is still valid. *)
+  shows
+    "is_valid_frontier (insert_node new_node_id new_node circuit) frontier"
+    (* Shows that after inserting the new node, the exact same frontier is still valid. *)
 
 proof -
   show ?thesis
@@ -163,7 +176,7 @@ proof -
       unfolding qubit_in_circuit_def insert_node_def (* First "use", then "unfold". So that whatever you are "using" also gets "unfolded" in the subsequent steps *)
       by simp
 
-(* Because the old frontier is valid, and q is valid in the old circuit, there must be some node currently stored at "frontier q" (say frontier_node) 
+    (* Because the old frontier is valid, and q is valid in the old circuit, there must be some node currently stored at "frontier q" (say frontier_node) 
 
       That node must:
         1. exist in the node mapping ("old_frontier_node" below)
@@ -175,19 +188,19 @@ proof -
       old_frontier_node: 
       "nodes circuit (frontier q) = Some frontier_node"
 
-and old_frontier_node_uses_q:
-"node_uses_qubit frontier_node q"
+    and old_frontier_node_uses_q:
+      "node_uses_qubit frontier_node q"
 
-and old_frontier_edge:
-"make_edge (frontier q) (get_output_node_id q) q \<in> edges circuit"
+    and old_frontier_edge:
+      "make_edge (frontier q) (get_output_node_id q) q \<in> edges circuit"
 
-and old_frontier_unique_successor:
-"has_unique_wire_successor circuit q (frontier q)"
+    and old_frontier_unique_successor:
+      "has_unique_wire_successor circuit q (frontier q)"
 
       unfolding is_valid_frontier_def
       by auto
 
-(* new_node_id is unused (main assumption of this lemma), so nodes circuit new_node_id = None 
+    (* new_node_id is unused (main assumption of this lemma), so nodes circuit new_node_id = None 
        But frontier q stores "Some frontier_node"
 
        Combining these two, we can say that frontier q \<noteq> new_node_id. This is proven below.
@@ -255,17 +268,18 @@ and old_frontier_unique_successor:
     qed
   qed
 qed
+
 lemma update_next_id_preserves_valid_frontier:
   (* Updating only the next_id field preserves frontier validity.
 
      The frontier invariant depends on the circuit's qubit count, node mapping, and edge set. Updating next_id changes none of these fields.
   *)
 
-assumes valid_frontier:
-  "is_valid_frontier circuit frontier"
+  assumes valid_frontier:
+    "is_valid_frontier circuit frontier"
 
-shows 
-  "is_valid_frontier (circuit \<lparr> next_id := new_next_id \<rparr>) frontier"
+  shows 
+    "is_valid_frontier (circuit \<lparr> next_id := new_next_id \<rparr>) frontier"
 
   unfolding is_valid_frontier_def
 
@@ -297,20 +311,15 @@ proof (intro allI impI)
 
   show
     "\<exists>frontier_node.
-        nodes (circuit\<lparr>next_id := new_next_id\<rparr>) (frontier q)
-          = Some frontier_node
+        nodes (circuit\<lparr>next_id := new_next_id\<rparr>) (frontier q) = Some frontier_node
       \<and> node_uses_qubit frontier_node q
-      \<and> make_edge (frontier q) (get_output_node_id q) q
+      \<and> make_edge (frontier q) (get_output_node_id q) q 
           \<in> edges (circuit\<lparr>next_id := new_next_id\<rparr>)
-      \<and> has_unique_wire_successor
-          (circuit\<lparr>next_id := new_next_id\<rparr>)
-          q
-          (frontier q)"
+      \<and> has_unique_wire_successor (circuit\<lparr>next_id := new_next_id\<rparr>) q (frontier q)"
+
   proof (intro exI[of _ frontier_node] conjI)
     show
-      "nodes (circuit\<lparr>next_id := new_next_id\<rparr>)
-         (frontier q)
-       = Some frontier_node"
+      "nodes (circuit\<lparr>next_id := new_next_id\<rparr>) (frontier q) = Some frontier_node"
       using frontier_lookup
       by simp
 
@@ -326,10 +335,7 @@ proof (intro allI impI)
       by simp
 
     show
-      "has_unique_wire_successor
-         (circuit\<lparr>next_id := new_next_id\<rparr>)
-         q
-         (frontier q)"
+      "has_unique_wire_successor (circuit\<lparr>next_id := new_next_id\<rparr>) q (frontier q)"
       using frontier_unique_successor
       unfolding
         has_unique_wire_successor_def
@@ -337,16 +343,19 @@ proof (intro allI impI)
       by simp
   qed
 qed
+
 lemma edges_insert_edge[simp]: (* helper lemma *)
   (* Edge set after insertion is just union of edge set prior to insertion and the newly added edge *)
   "edges (insert_edge e circuit) = insert e (edges circuit)"
   unfolding insert_edge_def
   by simp
+
 lemma edges_delete_edge[simp]: (* helper lemma *)
   (* Edge set after deletion is just difference of edge set prior to deletion and the deleted edge *)
   "edges (delete_edge e circuit) = edges circuit - {e}"
   unfolding delete_edge_def
   by simp
+
 lemma initial_frontier_is_valid:
   (* The initial frontier correctly points from each qubit to its input boundary node. *)
   "is_valid_frontier (initial_circuit number_of_qubits) initial_frontier"
@@ -375,10 +384,7 @@ proof -
            (initial_frontier q)
            = Some frontier_node
        \<and> node_uses_qubit frontier_node q
-       \<and> make_edge
-           (initial_frontier q)
-           (get_output_node_id q)
-           q
+       \<and> make_edge (initial_frontier q) (get_output_node_id q) q
          \<in> edges (initial_circuit number_of_qubits)
       \<and> has_unique_wire_successor (initial_circuit number_of_qubits) q (initial_frontier q)"
       using
@@ -392,6 +398,7 @@ proof -
       by simp
   qed
 qed
+
 lemma initial_next_id_is_unused:
   (* The first operation-node ID is unused in the initial circuit. *)
   "next_id_is_unused (initial_circuit number_of_qubits)"
@@ -400,6 +407,7 @@ lemma initial_next_id_is_unused:
     initial_nodes_def
     get_first_operation_id_def
   by simp
+
 lemma initial_existing_node_ids_are_below_next_id:
   (* Every node stored in the initial circuit is a boundary node whose
      numerical ID is strictly smaller than the first operation-node ID.
