@@ -16,8 +16,7 @@ definition replace_operation ::
     (* Replace an existing operation node.
      If the supplied node ID does not refer to an OperationNode,
      leave the circuit unchanged. *)
-  "replace_operation node_id replacement_op circuit =
-     (
+  "replace_operation node_id replacement_op circuit = (
        case nodes circuit node_id of
          Some (OperationNode old_op) \<Rightarrow> insert_node node_id (OperationNode replacement_op) circuit
        | _ \<Rightarrow> circuit
@@ -47,8 +46,7 @@ definition valid_operation_replacement ::
   *)
   "valid_operation_replacement
       circuit operation_node_id replacement_op
-   \<longleftrightarrow>
-     (\<exists>original_op.
+   \<longleftrightarrow> (\<exists>original_op.
         nodes circuit operation_node_id = Some (OperationNode original_op)
       \<and> operation_in_circuit circuit replacement_op
       \<and> op_qargs replacement_op = op_qargs original_op)"
@@ -73,21 +71,14 @@ lemma valid_replacement_selected_node:
     "valid_operation_replacement
        circuit operation_node_id replacement_op"
   shows
-    "nodes (replace_operation operation_node_id replacement_op circuit) operation_node_id
+    "nodes (replace_operation operation_node_id replacement_op circuit) operation_node_id 
      = Some (OperationNode replacement_op)"
-
-proof -
-  from valid_replacement obtain original_op where
-    operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode original_op)"
-    unfolding valid_operation_replacement_def
-    by blast
-
-  show ?thesis
-    using operation_exists
-    by (rule replace_operation_selected_node)
-qed
+  
+  using
+    replace_operation_selected_node
+    valid_operation_replacement_def
+    valid_replacement
+  by auto
 
 lemma replacement_preserves_other_nodes:
   (* Replacing the operation stored at operation_node_id does not change
@@ -202,29 +193,13 @@ lemma valid_replacement_preserves_node_wire_usage:
         None \<Rightarrow> False
       | Some node \<Rightarrow> node_uses_qubit node q)"
 
-proof -
-
-  from valid_replacement obtain original_op where
-    operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode original_op)"
-  and
-    same_qargs:
-      "op_qargs replacement_op = op_qargs original_op"
-    unfolding valid_operation_replacement_def
-    by blast
-
-  show ?thesis
-
   by (metis
       node_uses_qubit.simps(3)
-        operation_exists
       option.simps(5)
-        replace_operation_selected_node
       replacement_preserves_other_nodes
-        same_qargs)
-
-qed
+      valid_operation_replacement_def
+      valid_replacement
+      valid_replacement_selected_node)
 
 lemma replacement_preserves_well_formed_circuit:
   (* Replacing an operation with another valid operation using the same
@@ -330,52 +305,14 @@ next
 
         show
           "node_exists (replace_operation operation_node_id replacement_op circuit) (edge_target e)"
-        
-        proof (cases "edge_target e = operation_node_id")
-          case True
 
-          have replaced_target:
-            "nodes
-               (replace_operation
-                  operation_node_id
-                  replacement_op
-                  circuit)
-               (edge_target e)
-             =
-             Some (OperationNode replacement_op)"
-            using
-              True
-              valid_replacement
-              valid_replacement_selected_node
-            by simp
-
-          show ?thesis
-            unfolding node_exists_def
-            using replaced_target
-            by simp
-
-        next
-          case False
-
-          have target_unchanged:
-            "nodes
-               (replace_operation
-                  operation_node_id
-                  replacement_op
-                  circuit)
-               (edge_target e)
-             =
-             nodes circuit (edge_target e)"
-            using False
-            by (rule replacement_preserves_other_nodes)
-
-          show ?thesis
-            using
+          by (metis
+              node_exists_def
+              option.distinct(1)
               original_target_exists
-              target_unchanged
-            unfolding node_exists_def
-            by simp
-        qed
+              replacement_preserves_other_nodes
+              valid_replacement
+              valid_replacement_selected_node)
 
       next
         from original_edge_well_formed
@@ -481,90 +418,18 @@ next
       by blast
 
     show ?thesis
-      unfolding are_well_formed_operation_nodes_def
-    proof (intro allI impI)
-      fix node_id op
-
-      assume updated_operation_node:
-        "nodes
-           (replace_operation
-              operation_node_id
-              replacement_op
-              circuit)
-           node_id
-         =
-         Some (OperationNode op)"
-
-      show
-        "operation_in_circuit
-           (replace_operation
-              operation_node_id
-              replacement_op
-              circuit)
-           op"
-
-      proof (cases "node_id = operation_node_id")
-        case True
-
-        have selected_node:
-          "nodes
-             (replace_operation
-                operation_node_id
-                replacement_op
-                circuit)
-             operation_node_id
-           =
-           Some (OperationNode replacement_op)"
-          using valid_replacement
-      by (rule
+      by (metis
+          are_well_formed_operation_nodes_def
+          circuit_node.inject(3)
+          operation_in_circuit_def
+          option.sel
+          original_operation_nodes
+          qubit_in_circuit_def
+          replacement_in_circuit
+          replacement_preserves_num_qubits
+          replacement_preserves_other_nodes
+          valid_replacement
           valid_replacement_selected_node)
-
-        have operation_is_replacement:
-          "op = replacement_op"
-          using
-            updated_operation_node
-            selected_node
-            True
-          by simp
-
-        show ?thesis
-          using
-            replacement_in_circuit
-            operation_is_replacement
-            replacement_preserves_num_qubits
-          unfolding
-            operation_in_circuit_def
-            qubit_in_circuit_def
-          by simp
-
-      next
-        case False
-
-        have original_operation_node:
-          "nodes circuit node_id =
-             Some (OperationNode op)"
-          using
-            False
-            replacement_preserves_other_nodes
-            updated_operation_node
-          by auto
-
-        from original_operation_nodes original_operation_node
-        have original_operation_in_circuit:
-          "operation_in_circuit circuit op"
-          unfolding are_well_formed_operation_nodes_def
-          by simp
-
-        show ?thesis
-          using
-            original_operation_in_circuit
-            replacement_preserves_num_qubits
-          unfolding
-            operation_in_circuit_def
-            qubit_in_circuit_def
-          by simp
-      qed
-    qed
   qed
 qed
 
@@ -655,32 +520,12 @@ proof (intro allI impI)
     "case nodes circuit node_a of
        None \<Rightarrow> False
      | Some node \<Rightarrow> node_uses_qubit node q"
-
-  proof -
-
-    have updated_usage:
-      "case
-         nodes (replace_operation
-              operation_node_id
-              replacement_op
-              circuit)
-           node_a
-       of
-         None \<Rightarrow> False
-       | Some node \<Rightarrow> node_uses_qubit node q"
-      using
-        updated_node_a
-        updated_node_a_uses_q
-      by simp
-
-    show ?thesis
-      using
+    by (metis
+        option.simps(5)
         updated_node_a
         updated_node_a_uses_q
         valid_replacement
-        valid_replacement_preserves_node_wire_usage
-      by fastforce
-  qed
+        valid_replacement_preserves_node_wire_usage)
 
   then obtain original_node_a_value where
     original_node_a:
@@ -881,30 +726,12 @@ proof -
           "case nodes circuit node_id of
              None \<Rightarrow> False
            | Some node \<Rightarrow> node_uses_qubit node q"
-
-        proof -
-          have updated_node_uses_q:
-            "case
-               nodes (replace_operation
-                    operation_node_id
-                    replacement_op
-                    circuit)
-                 node_id
-             of
-               None \<Rightarrow> False
-             | Some node \<Rightarrow> node_uses_qubit node q"
-            using
+          by (metis
+              option.simps(5)
               updated_operation_node
               updated_operation_uses_q
-            by simp
-
-          show ?thesis
-            using
-              updated_node_uses_q
               valid_replacement
-              valid_replacement_preserves_node_wire_usage
-            by simp
-        qed
+              valid_replacement_preserves_node_wire_usage)
 
         then obtain original_node where
           original_node:
@@ -915,57 +742,13 @@ proof -
 
         have original_node_is_operation:
           "\<exists>original_op. original_node = OperationNode original_op"
-
-        proof (cases "node_id = operation_node_id")
-
-          case True
-
-          from valid_replacement obtain selected_original_op where
-            selected_operation_exists:
-            "nodes circuit operation_node_id =
-                 Some (OperationNode selected_original_op)"
-            unfolding valid_operation_replacement_def
-            by blast
-
-          have
-            "original_node = OperationNode selected_original_op"
-            using
+          by (metis
+              option.inject
               original_node
-              selected_operation_exists
-              True
-            by simp
-
-          then show ?thesis
-            by simp
-
-        next
-          case False
-
-          have node_unchanged:
-            "nodes
-               (replace_operation
-                  operation_node_id
-                  replacement_op
-                  circuit)
-               node_id
-             =
-             nodes circuit node_id"
-            using False
-          by (rule
-              replacement_preserves_other_nodes)
-
-          have
-            "original_node = OperationNode op"
-            using
-              original_node
+              replacement_preserves_other_nodes
               updated_operation_node
-              node_unchanged
-            by simp
-
-          then show ?thesis
-            by simp
-
-        qed
+              valid_operation_replacement_def
+              valid_replacement)
 
         then obtain original_op where
           original_node_value:
@@ -1207,10 +990,8 @@ definition rename_subcircuit_node_id ::
        so it cannot collide with any existing host node when the host
        satisfies its node-allocation invariant.
     *)
-    "rename_subcircuit_node_id circuit local_node_id =
-       NodeId
-         (node_id_to_nat (next_id circuit)
-          + node_id_to_nat local_node_id)"
+    "rename_subcircuit_node_id circuit local_node_id = 
+       NodeId (node_id_to_nat (next_id circuit) + node_id_to_nat local_node_id)"
 
 definition rename_subcircuit_edge ::
   "quantum_circuit \<Rightarrow> edge \<Rightarrow> edge"
@@ -1218,11 +999,9 @@ where
   (* Renames both endpoints of a subcircuit edge while preserving its
      wire label. *)
   "rename_subcircuit_edge circuit e =
-     make_edge
-       (rename_subcircuit_node_id
-          circuit (edge_source e))
-       (rename_subcircuit_node_id
-          circuit (edge_target e))
+     make_edge 
+       (rename_subcircuit_node_id circuit (edge_source e))
+       (rename_subcircuit_node_id circuit (edge_target e))
        (edge_wire e)"
 
 definition renamed_subcircuit_internal_edges ::
@@ -1230,19 +1009,16 @@ definition renamed_subcircuit_internal_edges ::
 where
   (* Returns the internal edge set of the replacement fragment after
      translating every local node ID into the fresh host namespace. *)
-  "renamed_subcircuit_internal_edges circuit subcircuit =
-     rename_subcircuit_edge circuit
-       ` subcircuit_internal_edges subcircuit"
+  "renamed_subcircuit_internal_edges circuit subcircuit = 
+     rename_subcircuit_edge circuit ` subcircuit_internal_edges subcircuit"
 
 definition renamed_input_interface ::
   "quantum_circuit \<Rightarrow> subcircuit \<Rightarrow> qubit \<Rightarrow> node_id option"
   where
     (* Returns the fresh host-circuit ID corresponding to the
        subcircuit's input interface node on wire q. *)
-    "renamed_input_interface circuit subcircuit q =
-       map_option
-         (rename_subcircuit_node_id circuit)
-         (input_interface subcircuit q)"
+    "renamed_input_interface circuit subcircuit q = 
+       map_option (rename_subcircuit_node_id circuit) (input_interface subcircuit q)"
 
 definition renamed_output_interface ::
   "quantum_circuit \<Rightarrow> subcircuit \<Rightarrow> qubit \<Rightarrow> node_id option"
@@ -1281,19 +1057,13 @@ lemma renamed_subcircuit_node_id_is_unused:
   *)
   assumes unused_above_next_id:
     "\<And>node_id.
-       node_id_to_nat node_id
-         \<ge> node_id_to_nat (next_id circuit)
-       \<Longrightarrow> nodes circuit node_id = None"
+       node_id_to_nat node_id \<ge> node_id_to_nat (next_id circuit) \<Longrightarrow> nodes circuit node_id = None"
   shows
-    "nodes circuit
-       (rename_subcircuit_node_id circuit local_node_id)
-     = None"
+    "nodes circuit (rename_subcircuit_node_id circuit local_node_id) = None"
 
 proof (rule unused_above_next_id)
   show
-    "node_id_to_nat
-       (rename_subcircuit_node_id circuit local_node_id)
-     \<ge> node_id_to_nat (next_id circuit)"
+    "node_id_to_nat (rename_subcircuit_node_id circuit local_node_id) \<ge> node_id_to_nat (next_id circuit)"
 
     unfolding rename_subcircuit_node_id_def
     by simp
@@ -1323,12 +1093,9 @@ lemma rename_subcircuit_edge_preserves_distinct_endpoints:
     "edge_source e \<noteq> edge_target e"
 
   shows
-    "edge_source (rename_subcircuit_edge circuit e)
-     \<noteq>
-     edge_target (rename_subcircuit_edge circuit e)"
+    "edge_source (rename_subcircuit_edge circuit e) \<noteq> edge_target (rename_subcircuit_edge circuit e)"
 
 proof
-
   assume renamed_endpoints_equal:
     "edge_source (rename_subcircuit_edge circuit e) =
      edge_target (rename_subcircuit_edge circuit e)"
@@ -1351,7 +1118,6 @@ proof
   show False
     using distinct_endpoints original_endpoints_equal
     by contradiction
-
 qed
 
 lemma renamed_subcircuit_internal_edge:
@@ -1366,8 +1132,7 @@ lemma renamed_subcircuit_internal_edge:
     "e \<in> subcircuit_internal_edges subcircuit"
 
   shows
-    "rename_subcircuit_edge circuit e
-       \<in> renamed_subcircuit_internal_edges circuit subcircuit"
+    "rename_subcircuit_edge circuit e \<in> renamed_subcircuit_internal_edges circuit subcircuit"
 
   using internal_edge
   unfolding renamed_subcircuit_internal_edges_def
@@ -1383,44 +1148,19 @@ lemma renamed_input_interface_node_is_unused:
   *)
   assumes unused_above_next_id:
     "\<And>node_id.
-       node_id_to_nat node_id
-         \<ge> node_id_to_nat (next_id circuit)
-       \<Longrightarrow> nodes circuit node_id = None"
+       node_id_to_nat node_id \<ge> node_id_to_nat (next_id circuit) \<Longrightarrow> nodes circuit node_id = None"
 
   and renamed_interface:
-    "renamed_input_interface circuit subcircuit q =
-       Some renamed_node_id"
+    "renamed_input_interface circuit subcircuit q = Some renamed_node_id"
 
   shows
     "nodes circuit renamed_node_id = None"
-
-proof (cases "input_interface subcircuit q")
-
-  case None
-
-  then show ?thesis
-    using renamed_interface
-    unfolding renamed_input_interface_def
-    by simp
-
-next
-
-  case (Some local_node_id)
-
-  have renamed_node_id:
-    "renamed_node_id =
-       rename_subcircuit_node_id circuit local_node_id"
-
-    using renamed_interface Some
-    unfolding renamed_input_interface_def
-    by simp
-
-  show ?thesis
-    unfolding renamed_node_id
-    using unused_above_next_id
-    by (rule renamed_subcircuit_node_id_is_unused)
-
-qed
+  using
+    renamed_input_interface_def
+    renamed_interface
+    renamed_subcircuit_node_id_is_unused
+    unused_above_next_id
+  by auto
 
 lemma renamed_output_interface_node_is_unused:
   (* If a renamed output interface contains node_id, then node_id is
@@ -1432,44 +1172,19 @@ lemma renamed_output_interface_node_is_unused:
   *)
   assumes unused_above_next_id:
     "\<And>node_id.
-       node_id_to_nat node_id
-         \<ge> node_id_to_nat (next_id circuit)
-       \<Longrightarrow> nodes circuit node_id = None"
+       node_id_to_nat node_id \<ge> node_id_to_nat (next_id circuit) \<Longrightarrow> nodes circuit node_id = None"
 
   and renamed_interface:
-    "renamed_output_interface circuit subcircuit q =
-       Some renamed_node_id"
+    "renamed_output_interface circuit subcircuit q = Some renamed_node_id"
 
   shows
     "nodes circuit renamed_node_id = None"
-
-proof (cases "output_interface subcircuit q")
-
-  case None
-
-  then show ?thesis
-    using renamed_interface
-    unfolding renamed_output_interface_def
-    by simp
-
-next
-
-  case (Some local_node_id)
-
-  have renamed_node_id:
-    "renamed_node_id =
-       rename_subcircuit_node_id circuit local_node_id"
-
-    using renamed_interface Some
-    unfolding renamed_output_interface_def
-    by simp
-
-  show ?thesis
-    unfolding renamed_node_id
-    using unused_above_next_id
-    by (rule renamed_subcircuit_node_id_is_unused)
-
-qed
+  using
+    renamed_interface
+    renamed_output_interface_def
+    renamed_subcircuit_node_id_is_unused
+    unused_above_next_id
+  by auto
 
 lemma renamed_subcircuit_edge_source:
   (* The source of a renamed edge is the renamed form of its original
@@ -1511,11 +1226,9 @@ definition remove_operation_node ::
     "remove_operation_node circuit operation_node_id =
        circuit
          \<lparr>
-           nodes :=
-             (nodes circuit)
-               (operation_node_id := None),
+           nodes := (nodes circuit) (operation_node_id := None),
   
-           edges :=
+           edges := 
              {e \<in> edges circuit.
                 edge_source e \<noteq> operation_node_id
               \<and> edge_target e \<noteq> operation_node_id}
@@ -1523,10 +1236,7 @@ definition remove_operation_node ::
 
 lemma remove_operation_node_selected[simp]:
   (* Looking up the removed node ID after removal returns None. *)
-  "nodes
-     (remove_operation_node circuit operation_node_id)
-     operation_node_id
-   = None"
+  "nodes (remove_operation_node circuit operation_node_id) operation_node_id = None"
 
   unfolding remove_operation_node_def
   by simp
@@ -1538,11 +1248,7 @@ lemma remove_operation_node_other[simp]:
     "other_node_id \<noteq> operation_node_id"
 
   shows
-    "nodes
-       (remove_operation_node circuit operation_node_id)
-       other_node_id
-     =
-     nodes circuit other_node_id"
+    "nodes (remove_operation_node circuit operation_node_id) other_node_id = nodes circuit other_node_id"
 
   using different_node
   unfolding remove_operation_node_def
@@ -1551,10 +1257,8 @@ lemma remove_operation_node_other[simp]:
 lemma edges_remove_operation_node[simp]:
   (* The resulting edge set contains exactly the original edges that
      are not incident on the removed node. *)
-  "edges
-     (remove_operation_node circuit operation_node_id)
-   =
-   {e \<in> edges circuit.
+  "edges (remove_operation_node circuit operation_node_id) 
+   = {e \<in> edges circuit.
       edge_source e \<noteq> operation_node_id
     \<and> edge_target e \<noteq> operation_node_id}"
 
@@ -1565,20 +1269,19 @@ lemma remove_operation_node_has_no_outgoing_edge:
   (* After removal, no remaining edge has the removed node as its
      source. *)
   assumes edge_remains:
-    "e \<in> edges
-       (remove_operation_node circuit operation_node_id)"
+    "e \<in> edges (remove_operation_node circuit operation_node_id)"
 
   shows
     "edge_source e \<noteq> operation_node_id"
 
   using edge_remains
   by simp
+
 lemma remove_operation_node_has_no_incoming_edge:
   (* After removal, no remaining edge has the removed node as its
      target. *)
   assumes edge_remains:
-    "e \<in> edges
-       (remove_operation_node circuit operation_node_id)"
+    "e \<in> edges (remove_operation_node circuit operation_node_id)"
 
   shows
     "edge_target e \<noteq> operation_node_id"
@@ -1599,8 +1302,7 @@ lemma remove_operation_node_preserves_unrelated_edge:
     "edge_target e \<noteq> operation_node_id"
 
   shows
-    "e \<in> edges
-       (remove_operation_node circuit operation_node_id)"
+    "e \<in> edges (remove_operation_node circuit operation_node_id)"
 
   using
     edge_exists
@@ -1610,10 +1312,7 @@ lemma remove_operation_node_preserves_unrelated_edge:
 
 lemma remove_operation_node_preserves_num_qubits[simp]:
   (* Removing a node does not change the circuit's qubit count. *)
-  "num_qubits
-     (remove_operation_node circuit operation_node_id)
-   =
-   num_qubits circuit"
+  "num_qubits (remove_operation_node circuit operation_node_id) = num_qubits circuit"
 
   unfolding remove_operation_node_def
   by simp
@@ -1621,19 +1320,13 @@ lemma remove_operation_node_preserves_num_qubits[simp]:
 lemma remove_operation_node_preserves_next_id[simp]:
   (* Removing a node does not allocate any IDs, so next_id remains
      unchanged. *)
-  "next_id
-     (remove_operation_node circuit operation_node_id)
-   =
-   next_id circuit"
+  "next_id (remove_operation_node circuit operation_node_id) = next_id circuit"
 
   unfolding remove_operation_node_def
   by simp
 
 definition insert_subcircuit_nodes ::
-  "quantum_circuit
-    \<Rightarrow> quantum_circuit
-    \<Rightarrow> subcircuit
-    \<Rightarrow> quantum_circuit"
+  "quantum_circuit \<Rightarrow> quantum_circuit \<Rightarrow> subcircuit \<Rightarrow> quantum_circuit"
 where
   (* Copies every operation node from the replacement subcircuit into
      the current host circuit.
@@ -1658,34 +1351,21 @@ where
      namespace of the subcircuit. The edge set and qubit count are left
      unchanged.
   *)
-  "insert_subcircuit_nodes
-      original_circuit
-      current_circuit
-      replacement =
-     current_circuit
+  "insert_subcircuit_nodes original_circuit current_circuit replacement
+   = current_circuit
        \<lparr>
          nodes :=
            (\<lambda>host_node_id.
               let
-                renaming_offset =
-                  node_id_to_nat (next_id original_circuit);
-
-                host_node_number =
-                  node_id_to_nat host_node_id;
-
-                local_node_id =
-                  NodeId
-                    (host_node_number - renaming_offset)
+                renaming_offset = node_id_to_nat (next_id original_circuit);
+                host_node_number = node_id_to_nat host_node_id;
+                local_node_id = NodeId (host_node_number - renaming_offset)
               in
                 if renaming_offset \<le> host_node_number
-                   \<and> local_node_id
-                       \<in> subcircuit_operation_node_ids replacement
+                   \<and> local_node_id \<in> subcircuit_operation_node_ids replacement
                 then
-                  nodes
-                    (subgraph replacement)
-                    local_node_id
-                else
-                  nodes current_circuit host_node_id)
+                  nodes (subgraph replacement) local_node_id
+                else nodes current_circuit host_node_id)
        \<rparr>"
 
 lemma insert_subcircuit_nodes_node_cases:
@@ -1698,7 +1378,6 @@ lemma insert_subcircuit_nodes_node_cases:
         local_node_id \<in> subcircuit_operation_node_ids replacement
         \<and> node_id = rename_subcircuit_node_id original_circuit local_node_id
         \<and> nodes (subgraph replacement) local_node_id = Some node)"
-
 
 proof -
   obtain host_node_number where node_id_eq:
@@ -1714,17 +1393,12 @@ proof -
 
   from inserted_node have inserted_node_cases:
     "(if renaming_offset \<le> host_node_number
-         \<and>
-         ?local_node_id
-           \<in> subcircuit_operation_node_ids replacement
+         \<and> ?local_node_id \<in> subcircuit_operation_node_ids replacement
       then
-        nodes
-          (subgraph replacement)
-          ?local_node_id
+        nodes (subgraph replacement) ?local_node_id
       else
         nodes circuit node_id)
-     =
-     Some node"
+     = Some node"
     unfolding
       insert_subcircuit_nodes_def
       node_id_eq
@@ -1745,20 +1419,12 @@ lemma insert_subcircuit_nodes_copies_operation_node:
   (* Every local operation node appears at its renamed host-circuit ID
      after insertion. *)
   assumes local_operation_node:
-    "local_node_id
-       \<in> subcircuit_operation_node_ids replacement"
+    "local_node_id \<in> subcircuit_operation_node_ids replacement"
 
   shows
-    "nodes
-       (insert_subcircuit_nodes
-          original_circuit
-          current_circuit
-          replacement)
-       (rename_subcircuit_node_id
-          original_circuit
-          local_node_id)
-     =
-     nodes (subgraph replacement) local_node_id"
+    "nodes (insert_subcircuit_nodes original_circuit current_circuit replacement)
+       (rename_subcircuit_node_id original_circuit local_node_id)
+     = nodes (subgraph replacement) local_node_id"
 
   using local_operation_node
   unfolding
@@ -1772,24 +1438,15 @@ lemma insert_subcircuit_nodes_copies_operation:
   (* If a local subcircuit node stores OperationNode op, then its
      renamed host ID stores the same operation after insertion. *)
   assumes local_operation:
-    "nodes (subgraph replacement) local_node_id =
-       Some (OperationNode op)"
+    "nodes (subgraph replacement) local_node_id = Some (OperationNode op)"
 
   assumes allocated_local_node:
-    "local_node_id
-       \<in> subcircuit_operation_node_ids replacement"
+    "local_node_id \<in> subcircuit_operation_node_ids replacement"
 
   shows
-    "nodes
-       (insert_subcircuit_nodes
-          original_circuit
-          current_circuit
-          replacement)
-       (rename_subcircuit_node_id
-          original_circuit
-          local_node_id)
-     =
-     Some (OperationNode op)"
+    "nodes (insert_subcircuit_nodes original_circuit current_circuit replacement)
+       (rename_subcircuit_node_id original_circuit local_node_id)
+     = Some (OperationNode op)"
 
   using
     insert_subcircuit_nodes_copies_operation_node[
@@ -1802,18 +1459,11 @@ lemma insert_subcircuit_nodes_preserves_node_below_next_id:
   (* Node-table entries below the original next_id cannot belong to the
      renamed subcircuit namespace and therefore remain unchanged. *)
   assumes existing_namespace:
-    "node_id_to_nat node_id
-       < node_id_to_nat (next_id original_circuit)"
+    "node_id_to_nat node_id < node_id_to_nat (next_id original_circuit)"
 
   shows
-    "nodes
-       (insert_subcircuit_nodes
-          original_circuit
-          current_circuit
-          replacement)
-       node_id
-     =
-     nodes current_circuit node_id"
+    "nodes (insert_subcircuit_nodes original_circuit current_circuit replacement) node_id
+     = nodes current_circuit node_id"
 
   using existing_namespace
   unfolding insert_subcircuit_nodes_def
@@ -1821,13 +1471,7 @@ lemma insert_subcircuit_nodes_preserves_node_below_next_id:
 
 lemma insert_subcircuit_nodes_preserves_edges[simp]:
   (* Copying nodes does not yet insert any subcircuit edges. *)
-  "edges
-     (insert_subcircuit_nodes
-        original_circuit
-        current_circuit
-        replacement)
-   =
-   edges current_circuit"
+  "edges (insert_subcircuit_nodes original_circuit current_circuit replacement) = edges current_circuit"
 
   unfolding insert_subcircuit_nodes_def
   by simp
@@ -1835,13 +1479,7 @@ lemma insert_subcircuit_nodes_preserves_edges[simp]:
 lemma insert_subcircuit_nodes_preserves_num_qubits[simp]:
   (* Copying replacement nodes does not change the host's qubit
      universe. *)
-  "num_qubits
-     (insert_subcircuit_nodes
-        original_circuit
-        current_circuit
-        replacement)
-   =
-   num_qubits current_circuit"
+  "num_qubits (insert_subcircuit_nodes original_circuit current_circuit replacement) = num_qubits current_circuit"
 
   unfolding insert_subcircuit_nodes_def
   by simp
@@ -1851,22 +1489,13 @@ lemma insert_subcircuit_nodes_preserves_next_id[simp]:
      circuit's allocation boundary. The complete replacement
      transformation will update next_id once all nodes and edges have
      been installed. *)
-  "next_id
-     (insert_subcircuit_nodes
-        original_circuit
-        current_circuit
-        replacement)
-   =
-   next_id current_circuit"
+  "next_id (insert_subcircuit_nodes original_circuit current_circuit replacement) = next_id current_circuit"
 
   unfolding insert_subcircuit_nodes_def
   by simp
 
 definition insert_subcircuit_internal_edges ::
-  "quantum_circuit
-    \<Rightarrow> quantum_circuit
-    \<Rightarrow> subcircuit
-    \<Rightarrow> quantum_circuit"
+  "quantum_circuit \<Rightarrow> quantum_circuit \<Rightarrow> subcircuit \<Rightarrow> quantum_circuit"
 where
   (* Inserts all internal edges of the replacement subcircuit into the
      current host circuit.
@@ -1878,32 +1507,17 @@ where
      replacement are inserted here. Connections between the host
      circuit and the replacement interfaces are added by later helpers.
   *)
-  "insert_subcircuit_internal_edges
-      original_circuit
-      current_circuit
-      replacement =
+  "insert_subcircuit_internal_edges original_circuit current_circuit replacement =
      current_circuit
        \<lparr>
          edges :=
-           edges current_circuit
-           \<union>
-           renamed_subcircuit_internal_edges
-             original_circuit
-             replacement
+           edges current_circuit 
+           \<union> renamed_subcircuit_internal_edges original_circuit replacement
        \<rparr>"
 
 lemma edges_insert_subcircuit_internal_edges[simp]:
-  "edges
-     (insert_subcircuit_internal_edges
-        original_circuit
-        current_circuit
-        replacement)
-   =
-   edges current_circuit
-   \<union>
-   renamed_subcircuit_internal_edges
-     original_circuit
-     replacement"
+  "edges (insert_subcircuit_internal_edges original_circuit current_circuit replacement)
+   = edges current_circuit \<union> renamed_subcircuit_internal_edges original_circuit replacement"
 
   unfolding insert_subcircuit_internal_edges_def
   by simp
@@ -1913,12 +1527,7 @@ lemma insert_subcircuit_internal_edges_preserves_existing_edge:
     "e \<in> edges current_circuit"
 
   shows
-    "e \<in>
-       edges
-         (insert_subcircuit_internal_edges
-            original_circuit
-            current_circuit
-            replacement)"
+    "e \<in> edges (insert_subcircuit_internal_edges original_circuit current_circuit replacement)"
 
   using existing_edge
   unfolding insert_subcircuit_internal_edges_def
@@ -1926,18 +1535,10 @@ lemma insert_subcircuit_internal_edges_preserves_existing_edge:
 
 lemma insert_subcircuit_internal_edges_contains_renamed_edge:
   assumes renamed_edge:
-    "e \<in>
-       renamed_subcircuit_internal_edges
-         original_circuit
-         replacement"
+    "e \<in> renamed_subcircuit_internal_edges original_circuit replacement"
 
   shows
-    "e \<in>
-       edges
-         (insert_subcircuit_internal_edges
-            original_circuit
-            current_circuit
-            replacement)"
+    "e \<in> edges (insert_subcircuit_internal_edges original_circuit current_circuit replacement)"
 
   using renamed_edge
   unfolding insert_subcircuit_internal_edges_def
@@ -1948,13 +1549,8 @@ lemma insert_subcircuit_internal_edges_contains_internal_edge:
     "e \<in> subcircuit_internal_edges replacement"
 
   shows
-    "rename_subcircuit_edge original_circuit e
-       \<in>
-       edges
-         (insert_subcircuit_internal_edges
-            original_circuit
-            current_circuit
-            replacement)"
+    "rename_subcircuit_edge original_circuit e 
+       \<in> edges (insert_subcircuit_internal_edges original_circuit current_circuit replacement)"
 
   using
     renamed_subcircuit_internal_edge[
@@ -1964,90 +1560,40 @@ lemma insert_subcircuit_internal_edges_contains_internal_edge:
   by simp
 
 lemma insert_subcircuit_internal_edges_preserves_nodes[simp]:
-  "nodes
-     (insert_subcircuit_internal_edges
-        original_circuit
-        current_circuit
-        replacement)
-   =
-   nodes current_circuit"
+  "nodes (insert_subcircuit_internal_edges original_circuit current_circuit replacement) = nodes current_circuit"
 
   unfolding insert_subcircuit_internal_edges_def
   by simp
 
 lemma insert_subcircuit_internal_edges_preserves_node[simp]:
-  "nodes
-     (insert_subcircuit_internal_edges
-        original_circuit
-        current_circuit
-        replacement)
-     node_id
-   =
-   nodes current_circuit node_id"
+  "nodes (insert_subcircuit_internal_edges original_circuit current_circuit replacement) node_id = nodes current_circuit node_id"
 
   unfolding insert_subcircuit_internal_edges_def
   by simp
 
 lemma insert_subcircuit_internal_edges_preserves_num_qubits[simp]:
-  "num_qubits
-     (insert_subcircuit_internal_edges
-        original_circuit
-        current_circuit
-        replacement)
-   =
-   num_qubits current_circuit"
+  "num_qubits (insert_subcircuit_internal_edges original_circuit current_circuit replacement) = num_qubits current_circuit"
 
   unfolding insert_subcircuit_internal_edges_def
   by simp
 
 lemma insert_subcircuit_internal_edges_preserves_next_id[simp]:
-  "next_id
-     (insert_subcircuit_internal_edges
-        original_circuit
-        current_circuit
-        replacement)
-   =
-   next_id current_circuit"
+  "next_id (insert_subcircuit_internal_edges original_circuit current_circuit replacement) = next_id current_circuit"
 
   unfolding insert_subcircuit_internal_edges_def
   by simp
 
 definition connect_subcircuit_input_on_wire ::
-  "quantum_circuit
-    \<Rightarrow> node_id
-    \<Rightarrow> subcircuit
-    \<Rightarrow> qubit
-    \<Rightarrow> quantum_circuit
-    \<Rightarrow> quantum_circuit"
+  "quantum_circuit \<Rightarrow> node_id \<Rightarrow> subcircuit \<Rightarrow> qubit \<Rightarrow> quantum_circuit \<Rightarrow> quantum_circuit"
 where
-  "connect_subcircuit_input_on_wire
-      original_circuit
-      operation_node
-      replacement
-      q
-      current_circuit =
-     (case
-        (predecessor_on_wire
-           original_circuit
-           operation_node
-           q,
-         renamed_input_interface
-           original_circuit
-           replacement
-           q)
+  "connect_subcircuit_input_on_wire original_circuit operation_node replacement q current_circuit =
+     (case (predecessor_on_wire original_circuit operation_node q, renamed_input_interface original_circuit replacement q)
       of
-        (Some predecessor, Some input_node) \<Rightarrow>
-          insert_edge
-            (make_edge predecessor input_node q)
-            current_circuit
+        (Some predecessor, Some input_node) \<Rightarrow> insert_edge (make_edge predecessor input_node q) current_circuit
       | _ \<Rightarrow> current_circuit)"
 
 definition connect_subcircuit_inputs ::
-  "quantum_circuit
-    \<Rightarrow> quantum_circuit
-    \<Rightarrow> node_id
-    \<Rightarrow> subcircuit
-    \<Rightarrow> quantum_circuit"
+  "quantum_circuit \<Rightarrow> quantum_circuit \<Rightarrow> node_id \<Rightarrow> subcircuit \<Rightarrow> quantum_circuit"
   where
     (* Redirects every incoming wire of the removed operation to the
        corresponding renamed input interface node of the replacement
@@ -2057,27 +1603,14 @@ definition connect_subcircuit_inputs ::
        becomes a predecessor of the replacement fragment.
     *)
 
-    "connect_subcircuit_inputs
-      original_circuit
-      current_circuit
-      operation_node
-      replacement =
-     Finite_Set.fold
-       (connect_subcircuit_input_on_wire
-          original_circuit
-          operation_node
-          replacement)
-       current_circuit
-       (subcircuit_interface_qubits replacement)"
+    "connect_subcircuit_inputs original_circuit current_circuit operation_node replacement =
+       Finite_Set.fold (connect_subcircuit_input_on_wire original_circuit operation_node replacement)
+             current_circuit (subcircuit_interface_qubits replacement)"
 
 lemma connect_subcircuit_input_on_wire_preserves_nodes[simp]:
   (* Connecting one replacement input wire changes only the edge set.
      Therefore, every node-table entry remains unchanged. *)
-  "nodes
-     (connect_subcircuit_input_on_wire
-        original_circuit operation_node replacement q circuit)
-   =
-   nodes circuit"
+  "nodes (connect_subcircuit_input_on_wire original_circuit operation_node replacement q circuit) = nodes circuit"
   unfolding
     connect_subcircuit_input_on_wire_def
     insert_edge_def
@@ -2088,32 +1621,18 @@ lemma connect_subcircuit_inputs_preserve_nodes[simp]:
     "finite (subcircuit_interface_qubits replacement)"
 
   shows
-    "nodes
-       (connect_subcircuit_inputs
-          original_circuit
-          circuit
-          operation_node
-          replacement)
-     =
-     nodes circuit"
-proof -
+    "nodes (connect_subcircuit_inputs original_circuit circuit operation_node replacement) = nodes circuit"
 
-  let ?connect_input =
-    "connect_subcircuit_input_on_wire
-       original_circuit
-       operation_node
-       replacement"
+proof -
+  let ?connect_input = "connect_subcircuit_input_on_wire original_circuit operation_node replacement"
 
   interpret connect_input: comp_fun_commute ?connect_input
   proof
     fix first_qubit second_qubit
 
     show
-      "?connect_input second_qubit
-         \<circ> ?connect_input first_qubit
-       =
-       ?connect_input first_qubit
-         \<circ> ?connect_input second_qubit"
+      "?connect_input second_qubit \<circ> ?connect_input first_qubit 
+       = ?connect_input first_qubit \<circ> ?connect_input second_qubit"
       unfolding
         connect_subcircuit_input_on_wire_def
         insert_edge_def
@@ -2123,39 +1642,23 @@ proof -
   qed
 
   have fold_preserves_nodes:
-    "finite interface_qubits
-     \<Longrightarrow>
-     nodes
-       (Finite_Set.fold
-          ?connect_input
-          current_circuit
-          interface_qubits)
-     =
-     nodes current_circuit"
+    "finite interface_qubits \<Longrightarrow> 
+       nodes (Finite_Set.fold ?connect_input current_circuit interface_qubits) = nodes current_circuit"
     for interface_qubits current_circuit
+ 
   proof (induction interface_qubits arbitrary: current_circuit
            rule: finite_induct)
-
     case empty
 
     show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect_input
-         current_circuit
-         (insert q interface_qubits)
-       =
-       ?connect_input q
-         (Finite_Set.fold
-            ?connect_input
-            current_circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect_input current_circuit (insert q interface_qubits)
+         = ?connect_input q (Finite_Set.fold ?connect_input current_circuit interface_qubits)"
       using insert.hyps
       by (rule connect_input.fold_insert)
 
@@ -2166,13 +1669,8 @@ proof -
   qed
 
   have folded_nodes:
-    "nodes
-       (Finite_Set.fold
-          ?connect_input
-          circuit
-          (subcircuit_interface_qubits replacement))
-     =
-     nodes circuit"
+    "nodes (Finite_Set.fold ?connect_input circuit (subcircuit_interface_qubits replacement))
+     = nodes circuit"
     using
       finite_interfaces
       fold_preserves_nodes
@@ -2187,11 +1685,8 @@ qed
 lemma connect_subcircuit_input_on_wire_preserves_num_qubits[simp]:
   (* Connecting one replacement input wire does not change the number
      of qubits in the host circuit. *)
-  "num_qubits
-     (connect_subcircuit_input_on_wire
-        original_circuit operation_node replacement q circuit)
-   =
-   num_qubits circuit"
+  "num_qubits (connect_subcircuit_input_on_wire original_circuit operation_node replacement q circuit)
+   = num_qubits circuit"
   unfolding
     connect_subcircuit_input_on_wire_def
     insert_edge_def
@@ -2201,11 +1696,8 @@ lemma connect_subcircuit_input_on_wire_preserves_next_id[simp]:
   (* Connecting one replacement input wire inserts no nodes and
      therefore does not advance the host circuit's allocation
      boundary. *)
-  "next_id
-     (connect_subcircuit_input_on_wire
-        original_circuit operation_node replacement q circuit)
-   =
-   next_id circuit"
+  "next_id (connect_subcircuit_input_on_wire original_circuit operation_node replacement q circuit)
+   = next_id circuit"
   unfolding
     connect_subcircuit_input_on_wire_def
     insert_edge_def
@@ -2223,29 +1715,8 @@ lemma connect_subcircuit_input_on_wire_commute:
      This property is required for Finite_Set.fold, because the
      interface-qubit set has no distinguished traversal order.
   *)
-  "connect_subcircuit_input_on_wire
-      original_circuit
-      operation_node
-      replacement
-      q1
-      (connect_subcircuit_input_on_wire
-         original_circuit
-         operation_node
-         replacement
-         q2
-         circuit)
-   =
-   connect_subcircuit_input_on_wire
-      original_circuit
-      operation_node
-      replacement
-      q2
-      (connect_subcircuit_input_on_wire
-         original_circuit
-         operation_node
-         replacement
-         q1
-         circuit)"
+  "connect_subcircuit_input_on_wire original_circuit operation_node replacement q1 (connect_subcircuit_input_on_wire original_circuit operation_node replacement q2 circuit)
+   = connect_subcircuit_input_on_wire original_circuit operation_node replacement q2 (connect_subcircuit_input_on_wire original_circuit operation_node replacement q1 circuit)"
 
   unfolding
     connect_subcircuit_input_on_wire_def
@@ -2255,45 +1726,8 @@ lemma connect_subcircuit_input_on_wire_commute:
   by (simp add: insert_commute)
 
 interpretation connect_subcircuit_input:
-  comp_fun_commute
-    "connect_subcircuit_input_on_wire
-       original_circuit
-       operation_node
-       replacement"
-proof
-  fix q1 q2
-
-  show
-    "connect_subcircuit_input_on_wire
-       original_circuit
-       operation_node
-       replacement
-       q2
-     \<circ>
-     connect_subcircuit_input_on_wire
-       original_circuit
-       operation_node
-       replacement
-       q1
-     =
-     connect_subcircuit_input_on_wire
-       original_circuit
-       operation_node
-       replacement
-       q1
-     \<circ>
-     connect_subcircuit_input_on_wire
-       original_circuit
-       operation_node
-       replacement
-       q2"
-
-    apply (rule ext)
-    using
-      connect_subcircuit_input_on_wire_commute[
-        of original_circuit operation_node replacement q1 q2]
-    by simp
-qed
+  comp_fun_commute "connect_subcircuit_input_on_wire original_circuit operation_node replacement"
+  by (simp add: comp_def comp_fun_commute.intro connect_subcircuit_input_on_wire_commute)
 
 lemma compatible_subcircuit_interface_qubits_finite:
   (* A compatible subcircuit has exactly the finite set of qubits
@@ -2317,96 +1751,19 @@ lemma connect_subcircuit_inputs_preserves_nodes[simp]:
     "finite (subcircuit_interface_qubits replacement)"
 
   shows
-    "nodes
-       (connect_subcircuit_inputs
-          original_circuit
-          current_circuit
-          operation_node
-          replacement)
-     =
-     nodes current_circuit"
+    "nodes (connect_subcircuit_inputs original_circuit current_circuit operation_node replacement)
+     = nodes current_circuit"
 
   unfolding connect_subcircuit_inputs_def
-proof -
-  let ?connect =
-    "connect_subcircuit_input_on_wire
-       original_circuit
-       operation_node
-       replacement"
+  using
+    connect_subcircuit_inputs_def
+    connect_subcircuit_inputs_preserve_nodes
+    finite_interfaces
+  by auto
 
-  have fold_preserves_nodes:
-    "finite interface_qubits
-     \<Longrightarrow>
-     nodes
-       (Finite_Set.fold
-          ?connect
-          circuit
-          interface_qubits)
-     =
-     nodes circuit"
-    for interface_qubits circuit
-
-  proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
-    case empty
-
-    show ?case
-      by simp
-
-  next
-    case (insert q interface_qubits)
-
-    have fold_step:
-      "Finite_Set.fold
-         ?connect
-         circuit
-         (insert q interface_qubits)
-       =
-       ?connect q
-         (Finite_Set.fold
-            ?connect
-            circuit
-            interface_qubits)"
-      using insert.hyps(1, 2)
-      by (rule connect_subcircuit_input.fold_insert)
-
-    have induction_result:
-      "nodes
-         (Finite_Set.fold
-            ?connect
-            circuit
-            interface_qubits)
-       =
-       nodes circuit"
-      using insert.IH
-      by simp
-
-    show ?case
-      unfolding fold_step
-      using induction_result
-      by simp
-  qed
-
-  show
-    "nodes
-       (Finite_Set.fold
-          ?connect
-          current_circuit
-          (subcircuit_interface_qubits replacement))
-     =
-     nodes current_circuit"
-    using
-      finite_interfaces
-      fold_preserves_nodes
-    by simp
-qed
 
 definition connect_subcircuit_output_on_wire ::
-  "quantum_circuit
-    \<Rightarrow> node_id
-    \<Rightarrow> subcircuit
-    \<Rightarrow> qubit
-    \<Rightarrow> quantum_circuit
-    \<Rightarrow> quantum_circuit"
+  "quantum_circuit \<Rightarrow> node_id \<Rightarrow> subcircuit \<Rightarrow> qubit \<Rightarrow> quantum_circuit \<Rightarrow> quantum_circuit"
   where
   (* Connects the renamed output interface node on one wire to the
      original successor of the removed operation on that wire.
@@ -2415,34 +1772,16 @@ definition connect_subcircuit_output_on_wire ::
      circuit because the removed operation and its incident edges are
      no longer present in the current intermediate circuit.
   *)
-  "connect_subcircuit_output_on_wire
-      original_circuit
-      operation_node
-      replacement
-      q
-      current_circuit =
+  "connect_subcircuit_output_on_wire original_circuit operation_node replacement q current_circuit =
      (case
-        (successor_on_wire
-           original_circuit
-           operation_node
-           q,
-         renamed_output_interface
-           original_circuit
-           replacement
-           q)
+        (successor_on_wire original_circuit operation_node q, 
+         renamed_output_interface original_circuit replacement q)
       of
-        (Some successor, Some output_node) \<Rightarrow>
-          insert_edge
-            (make_edge output_node successor q)
-            current_circuit
+        (Some successor, Some output_node) \<Rightarrow> insert_edge (make_edge output_node successor q) current_circuit
       | _ \<Rightarrow> current_circuit)"
 
 definition connect_subcircuit_outputs ::
-  "quantum_circuit
-    \<Rightarrow> quantum_circuit
-    \<Rightarrow> node_id
-    \<Rightarrow> subcircuit
-    \<Rightarrow> quantum_circuit"
+  "quantum_circuit \<Rightarrow> quantum_circuit \<Rightarrow> node_id \<Rightarrow> subcircuit \<Rightarrow> quantum_circuit"
   where
     (* Redirects every outgoing wire of the removed operation to the
        corresponding renamed output interface node of the replacement
@@ -2451,27 +1790,16 @@ definition connect_subcircuit_outputs ::
        After this step, every successor of the removed operation becomes
        a successor of the replacement fragment.
     *)
-    "connect_subcircuit_outputs
-      original_circuit
-      current_circuit
-      operation_node
-      replacement =
+    "connect_subcircuit_outputs original_circuit current_circuit operation_node replacement =
      Finite_Set.fold
-       (connect_subcircuit_output_on_wire
-          original_circuit
-          operation_node
-          replacement)
-       current_circuit
+       (connect_subcircuit_output_on_wire original_circuit operation_node replacement) current_circuit
        (subcircuit_interface_qubits replacement)"
 
 lemma connect_subcircuit_output_on_wire_preserves_nodes[simp]:
   (* Connecting one replacement output wire changes only the edge set.
      Therefore, every node-table entry remains unchanged. *)
-  "nodes
-     (connect_subcircuit_output_on_wire
-        original_circuit operation_node replacement q circuit)
-   =
-   nodes circuit"
+  "nodes (connect_subcircuit_output_on_wire original_circuit operation_node replacement q circuit)
+   = nodes circuit"
   unfolding
     connect_subcircuit_output_on_wire_def
     insert_edge_def
@@ -2482,29 +1810,18 @@ lemma connect_subcircuit_outputs_preserve_nodes[simp]:
     "finite (subcircuit_interface_qubits replacement)"
 
   shows
-    "nodes
-       (connect_subcircuit_outputs
-          original_circuit circuit operation_node replacement)
-     =
-     nodes circuit"
-proof -
+    "nodes (connect_subcircuit_outputs original_circuit circuit operation_node replacement) = nodes circuit"
 
-  let ?connect_output =
-    "connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node
-       replacement"
+proof -
+  let ?connect_output = "connect_subcircuit_output_on_wire original_circuit operation_node replacement"
 
   interpret connect_output: comp_fun_commute ?connect_output
   proof
     fix first_qubit second_qubit
 
     show
-      "?connect_output second_qubit
-         \<circ> ?connect_output first_qubit
-       =
-       ?connect_output first_qubit
-         \<circ> ?connect_output second_qubit"
+      "?connect_output second_qubit \<circ> ?connect_output first_qubit
+       = ?connect_output first_qubit \<circ> ?connect_output second_qubit"
       unfolding
         connect_subcircuit_output_on_wire_def
         insert_edge_def
@@ -2514,39 +1831,22 @@ proof -
   qed
 
   have fold_preserves_nodes:
-    "finite interface_qubits
-     \<Longrightarrow>
-     nodes
-       (Finite_Set.fold
-          ?connect_output
-          current_circuit
-          interface_qubits)
-     =
-     nodes current_circuit"
+    "finite interface_qubits \<Longrightarrow> nodes (Finite_Set.fold ?connect_output current_circuit interface_qubits)
+     = nodes current_circuit"
     for interface_qubits current_circuit
-  proof (induction interface_qubits arbitrary: current_circuit
-           rule: finite_induct)
 
+  proof (induction interface_qubits arbitrary: current_circuit rule: finite_induct)
     case empty
 
     show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect_output
-         current_circuit
-         (insert q interface_qubits)
-       =
-       ?connect_output q
-         (Finite_Set.fold
-            ?connect_output
-            current_circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect_output current_circuit (insert q interface_qubits)
+       = ?connect_output q (Finite_Set.fold ?connect_output current_circuit interface_qubits)"
       using insert.hyps
       by (rule connect_output.fold_insert)
 
@@ -2557,13 +1857,8 @@ proof -
   qed
 
   have folded_nodes:
-    "nodes
-       (Finite_Set.fold
-          ?connect_output
-          circuit
-          (subcircuit_interface_qubits replacement))
-     =
-     nodes circuit"
+    "nodes (Finite_Set.fold ?connect_output circuit (subcircuit_interface_qubits replacement))
+     = nodes circuit"
     using
       finite_interfaces
       fold_preserves_nodes
@@ -2578,11 +1873,8 @@ qed
 lemma connect_subcircuit_output_on_wire_preserves_num_qubits[simp]:
   (* Connecting one replacement output wire does not change the number
      of qubits in the host circuit. *)
-  "num_qubits
-     (connect_subcircuit_output_on_wire
-        original_circuit operation_node replacement q circuit)
-   =
-   num_qubits circuit"
+  "num_qubits (connect_subcircuit_output_on_wire original_circuit operation_node replacement q circuit)
+   = num_qubits circuit"
   unfolding
     connect_subcircuit_output_on_wire_def
     insert_edge_def
@@ -2592,11 +1884,8 @@ lemma connect_subcircuit_output_on_wire_preserves_next_id[simp]:
   (* Connecting one replacement output wire inserts no nodes and
      therefore does not advance the host circuit's allocation
      boundary. *)
-  "next_id
-     (connect_subcircuit_output_on_wire
-        original_circuit operation_node replacement q circuit)
-   =
-   next_id circuit"
+  "next_id (connect_subcircuit_output_on_wire original_circuit operation_node replacement q circuit)
+   = next_id circuit"
   unfolding
     connect_subcircuit_output_on_wire_def
     insert_edge_def
@@ -2614,29 +1903,10 @@ lemma connect_subcircuit_output_on_wire_commute:
      This property is required for Finite_Set.fold because the
      interface-qubit set has no distinguished traversal order.
   *)
-  "connect_subcircuit_output_on_wire
-      original_circuit
-      operation_node
-      replacement
-      q1
-      (connect_subcircuit_output_on_wire
-         original_circuit
-         operation_node
-         replacement
-         q2
-         circuit)
-   =
-   connect_subcircuit_output_on_wire
-      original_circuit
-      operation_node
-      replacement
-      q2
-      (connect_subcircuit_output_on_wire
-         original_circuit
-         operation_node
-         replacement
-         q1
-         circuit)"
+  "connect_subcircuit_output_on_wire original_circuit operation_node replacement q1
+      (connect_subcircuit_output_on_wire original_circuit operation_node replacement q2 circuit)
+   = connect_subcircuit_output_on_wire original_circuit operation_node replacement q2
+      (connect_subcircuit_output_on_wire original_circuit operation_node replacement q1 circuit)"
 
   unfolding
     connect_subcircuit_output_on_wire_def
@@ -2646,38 +1916,16 @@ lemma connect_subcircuit_output_on_wire_commute:
   by (simp add: insert_commute)
 
 interpretation connect_subcircuit_output:
-  comp_fun_commute
-    "connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node
-       replacement"
+  comp_fun_commute "connect_subcircuit_output_on_wire original_circuit operation_node replacement"
+
 proof
   fix q1 q2
 
   show
-    "connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node
-       replacement
-       q2
-     \<circ>
-     connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node
-       replacement
-       q1
-     =
-     connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node
-       replacement
-       q1
-     \<circ>
-     connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node
-       replacement
-       q2"
+    "connect_subcircuit_output_on_wire original_circuit operation_node replacement q2 \<circ>
+     connect_subcircuit_output_on_wire original_circuit operation_node replacement q1
+     = connect_subcircuit_output_on_wire original_circuit operation_node replacement q1 \<circ>
+       connect_subcircuit_output_on_wire original_circuit operation_node replacement q2"
 
     apply (rule ext)
     using connect_subcircuit_output_on_wire_commute
@@ -2692,94 +1940,19 @@ lemma connect_subcircuit_outputs_preserves_nodes[simp]:
     "finite (subcircuit_interface_qubits replacement)"
 
   shows
-    "nodes
-       (connect_subcircuit_outputs
-          original_circuit
-          current_circuit
-          operation_node
-          replacement)
-     =
-     nodes current_circuit"
+    "nodes (connect_subcircuit_outputs original_circuit current_circuit operation_node replacement)
+     = nodes current_circuit"
 
   unfolding connect_subcircuit_outputs_def
-proof -
-  let ?connect =
-    "connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node
-       replacement"
+  using
+    connect_subcircuit_outputs_def
+    connect_subcircuit_outputs_preserve_nodes
+    finite_interfaces
+  by auto
 
-  have fold_preserves_nodes:
-    "finite interface_qubits
-     \<Longrightarrow>
-     nodes
-       (Finite_Set.fold
-          ?connect
-          circuit
-          interface_qubits)
-     =
-     nodes circuit"
-    for interface_qubits circuit
-
-  proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
-    case empty
-
-    show ?case
-      by simp
-
-  next
-    case (insert q interface_qubits)
-
-    have fold_step:
-      "Finite_Set.fold
-         ?connect
-         circuit
-         (insert q interface_qubits)
-       =
-       ?connect q
-         (Finite_Set.fold
-            ?connect
-            circuit
-            interface_qubits)"
-      using insert.hyps(1, 2)
-      by simp
-
-    have induction_result:
-      "nodes
-         (Finite_Set.fold
-            ?connect
-            circuit
-            interface_qubits)
-       =
-       nodes circuit"
-      using insert.IH
-      by simp
-
-    show ?case
-      unfolding fold_step
-      using induction_result
-      by simp
-  qed
-
-  show
-    "nodes
-       (Finite_Set.fold
-          ?connect
-          current_circuit
-          (subcircuit_interface_qubits replacement))
-     =
-     nodes current_circuit"
-    using
-      finite_interfaces
-      fold_preserves_nodes
-    by simp
-qed
 
 definition update_frontier_after_subcircuit ::
-  "quantum_circuit
-    \<Rightarrow> frontier
-    \<Rightarrow> subcircuit
-    \<Rightarrow> frontier"
+  "quantum_circuit \<Rightarrow> frontier \<Rightarrow> subcircuit \<Rightarrow> frontier"
 where
   (* Updates the construction frontier after replacing an operation by
      a subcircuit.
@@ -2792,16 +1965,9 @@ where
      The original host circuit is required because its next_id fixes the
      renaming offset used for all inserted subcircuit nodes.
   *)
-  "update_frontier_after_subcircuit
-      original_circuit
-      current_frontier
-      replacement =
+  "update_frontier_after_subcircuit original_circuit current_frontier replacement =
      (\<lambda>q.
-        case
-          renamed_output_interface
-            original_circuit
-            replacement
-            q
+        case renamed_output_interface original_circuit replacement q
         of
           Some output_node \<Rightarrow> output_node
         | None \<Rightarrow> current_frontier q)"
@@ -2809,22 +1975,11 @@ where
 lemma update_frontier_after_subcircuit_with_output:
   (* If the replacement has a renamed output-interface node on q, that
      node becomes the new frontier on q. *)
-  assumes renamed_output:
-    "renamed_output_interface
-       original_circuit
-       replacement
-       q
-     =
-     Some output_node"
+  assumes renamed_output: 
+    "renamed_output_interface original_circuit replacement q = Some output_node"
 
   shows
-    "update_frontier_after_subcircuit
-       original_circuit
-       current_frontier
-       replacement
-       q
-     =
-     output_node"
+    "update_frontier_after_subcircuit original_circuit current_frontier replacement q = output_node"
 
   using renamed_output
   unfolding update_frontier_after_subcircuit_def
@@ -2834,21 +1989,10 @@ lemma update_frontier_after_subcircuit_without_output:
   (* If the replacement has no output interface on q, the old frontier
      on q remains unchanged. *)
   assumes no_renamed_output:
-    "renamed_output_interface
-       original_circuit
-       replacement
-       q
-     =
-     None"
+    "renamed_output_interface original_circuit replacement q = None"
 
   shows
-    "update_frontier_after_subcircuit
-       original_circuit
-       current_frontier
-       replacement
-       q
-     =
-     current_frontier q"
+    "update_frontier_after_subcircuit original_circuit current_frontier replacement q = current_frontier q"
 
   using no_renamed_output
   unfolding update_frontier_after_subcircuit_def
@@ -2861,15 +2005,8 @@ lemma update_frontier_after_subcircuit_output_interface:
     "output_interface replacement q = Some local_output_node"
 
   shows
-    "update_frontier_after_subcircuit
-       original_circuit
-       current_frontier
-       replacement
-       q
-     =
-     rename_subcircuit_node_id
-       original_circuit
-       local_output_node"
+    "update_frontier_after_subcircuit original_circuit current_frontier replacement q =
+       rename_subcircuit_node_id original_circuit local_output_node"
 
   using output_interface
   unfolding
@@ -2884,13 +2021,7 @@ lemma update_frontier_after_subcircuit_no_output_interface:
     "output_interface replacement q = None"
 
   shows
-    "update_frontier_after_subcircuit
-       original_circuit
-       current_frontier
-       replacement
-       q
-     =
-     current_frontier q"
+    "update_frontier_after_subcircuit original_circuit current_frontier replacement q = current_frontier q"
 
   using no_output_interface
   unfolding
@@ -2899,11 +2030,7 @@ lemma update_frontier_after_subcircuit_no_output_interface:
   by simp
 
 definition replace_operation_by_subcircuit ::
-  "quantum_circuit
-    \<Rightarrow> frontier
-    \<Rightarrow> node_id
-    \<Rightarrow> subcircuit
-    \<Rightarrow> quantum_circuit \<times> frontier"
+  "quantum_circuit \<Rightarrow> frontier \<Rightarrow> node_id \<Rightarrow> subcircuit \<Rightarrow> quantum_circuit \<times> frontier"
 where
   (* Replaces the specified operation node by the supplied subcircuit.
 
@@ -2918,77 +2045,27 @@ where
      Each stage is specified independently to simplify correctness
      proofs.
   *)
-  "replace_operation_by_subcircuit
-      circuit
-      frontier
-      operation_node
-      subcircuit =
+  "replace_operation_by_subcircuit circuit frontier operation_node subcircuit =
      (let
-        circuit1 =
-          remove_operation_node
-            circuit
-            operation_node;
-
-       circuit2 =
-          insert_subcircuit_nodes
-            circuit
-            circuit1
-            subcircuit;
-
-       circuit3 =
-          insert_subcircuit_internal_edges
-            circuit
-            circuit2
-            subcircuit;
-
-       circuit4 =
-          connect_subcircuit_inputs
-            circuit
-            circuit3
-            operation_node
-            subcircuit;
-        
-       circuit5 =
-          connect_subcircuit_outputs
-            circuit
-            circuit4
-            operation_node
-            subcircuit;
-
-       frontier' =
-          update_frontier_after_subcircuit
-            circuit
-            frontier
-            subcircuit
-
+        circuit1 = remove_operation_node circuit operation_node;
+        circuit2 = insert_subcircuit_nodes circuit circuit1 subcircuit;
+        circuit3 = insert_subcircuit_internal_edges circuit circuit2 subcircuit;
+        circuit4 = connect_subcircuit_inputs circuit circuit3 operation_node subcircuit;
+        circuit5 = connect_subcircuit_outputs circuit circuit4 operation_node subcircuit;
+        frontier' = update_frontier_after_subcircuit circuit frontier subcircuit
       in
         (circuit5
            \<lparr>
              next_id :=
-               NodeId
-                 (node_id_to_nat (next_id circuit)
-                  +
-                  node_id_to_nat
-                    (next_id (subgraph subcircuit)))
+               NodeId (node_id_to_nat (next_id circuit) + node_id_to_nat (next_id (subgraph subcircuit)))
            \<rparr>, \<comment>\<open> The intermediate helpers preserve next_id so that the original allocation boundary can be used consistently for every renaming. Once all replacement nodes and edges have been installed, advance next_id beyond the copied local node namespace. \<close>
          frontier'))"
 
 lemma replace_operation_by_subcircuit_next_id[simp]:
   (* After replacement, the allocation boundary lies beyond all copied
      replacement nodes. *)
-  "next_id
-      (fst
-        (replace_operation_by_subcircuit
-           circuit
-           frontier
-           operation_node
-           replacement))
-   =
-   NodeId
-     (node_id_to_nat (next_id circuit)
-      +
-      node_id_to_nat
-        (next_id (subgraph replacement)))"
+  "next_id (fst (replace_operation_by_subcircuit circuit frontier operation_node replacement))
+    = NodeId (node_id_to_nat (next_id circuit) + node_id_to_nat (next_id (subgraph replacement)))"
 
   unfolding replace_operation_by_subcircuit_def
   by simp
@@ -2996,17 +2073,8 @@ lemma replace_operation_by_subcircuit_next_id[simp]:
 lemma replace_operation_by_subcircuit_frontier[simp]:
   (* The second component returned by replacement is precisely the
      updated construction frontier. *)
-  "snd
-      (replace_operation_by_subcircuit
-         circuit
-         frontier
-         operation_node
-         replacement)
-   =
-   update_frontier_after_subcircuit
-     circuit
-     frontier
-     replacement"
+  "snd (replace_operation_by_subcircuit circuit frontier operation_node replacement)
+   = update_frontier_after_subcircuit circuit frontier replacement"
 
   unfolding replace_operation_by_subcircuit_def
   by simp
@@ -3047,8 +2115,7 @@ proof -
     by simp
 
   have operation_id_below_next_id:
-    "node_id_to_nat operation_node_id
-       < node_id_to_nat (next_id circuit)"
+    "node_id_to_nat operation_node_id < node_id_to_nat (next_id circuit)"
     using
       all_existing_node_ids_below_next_id_def
       allocation_valid
@@ -3062,34 +2129,15 @@ proof -
       compatible_subcircuit_interface_qubits_finite
     by simp
 
-  let ?circuit1 =
-    "remove_operation_node circuit operation_node_id"
+  let ?circuit1 = "remove_operation_node circuit operation_node_id"
 
-  let ?circuit2 =
-    "insert_subcircuit_nodes
-       circuit
-       ?circuit1
-       replacement"
+  let ?circuit2 = "insert_subcircuit_nodes circuit ?circuit1 replacement"
 
-  let ?circuit3 =
-    "insert_subcircuit_internal_edges
-       circuit
-       ?circuit2
-       replacement"
+  let ?circuit3 = "insert_subcircuit_internal_edges circuit ?circuit2 replacement"
 
-  let ?circuit4 =
-    "connect_subcircuit_inputs
-       circuit
-       ?circuit3
-       operation_node_id
-       replacement"
+  let ?circuit4 = "connect_subcircuit_inputs circuit ?circuit3 operation_node_id replacement"
 
-  let ?circuit5 =
-    "connect_subcircuit_outputs
-       circuit
-       ?circuit4
-       operation_node_id
-       replacement"
+  let ?circuit5 = "connect_subcircuit_outputs circuit ?circuit4 operation_node_id replacement"
 
   have absent_after_removal:
     "nodes ?circuit1 operation_node_id = None"
@@ -3137,62 +2185,17 @@ lemma replace_operation_by_subcircuit_contains_renamed_nodes:
     "finite (subcircuit_interface_qubits replacement)"
 
   assumes local_operation:
-    "nodes (subgraph replacement) local_node_id =
-       Some (OperationNode op)"
+    "nodes (subgraph replacement) local_node_id = Some (OperationNode op)"
 
   assumes allocated_local_node:
-    "local_node_id
-       \<in> subcircuit_operation_node_ids replacement"
+    "local_node_id \<in> subcircuit_operation_node_ids replacement"
 
   shows
-    "nodes
-       (fst
-         (replace_operation_by_subcircuit
-            original_circuit
-            frontier
-            operation_node_id
-            replacement))
-       (rename_subcircuit_node_id
-          original_circuit
-          local_node_id)
-     =
-     Some (OperationNode op)"
+    "nodes (fst (replace_operation_by_subcircuit original_circuit frontier operation_node_id replacement))
+       (rename_subcircuit_node_id original_circuit local_node_id) = Some (OperationNode op)"
 
-proof -
-  let ?circuit1 =
-    "remove_operation_node
-       original_circuit
-       operation_node_id"
-
-  let ?circuit2 =
-    "insert_subcircuit_nodes
-       original_circuit
-       ?circuit1
-       replacement"
-
-  have copied:
-    "nodes ?circuit2
-       (rename_subcircuit_node_id
-          original_circuit
-          local_node_id)
-     =
-     Some (OperationNode op)"
-    using
-      insert_subcircuit_nodes_copies_operation
-      local_operation
-      allocated_local_node
-    by simp
-
-  show ?thesis
-    using
-      copied
-      finite_interfaces
-    unfolding
-      replace_operation_by_subcircuit_def
-      Let_def
-      insert_subcircuit_internal_edges_def
-    by simp
-qed
+  by (simp add: allocated_local_node finite_interfaces insert_subcircuit_nodes_copies_operation local_operation
+      replace_operation_by_subcircuit_def)
 
 lemma replace_operation_by_subcircuit_preserves_unrelated_nodes:
   (* Every existing original circuit node other than the removed
@@ -3201,10 +2204,7 @@ lemma replace_operation_by_subcircuit_preserves_unrelated_nodes:
     "is_valid_construction_state circuit frontier"
 
   assumes valid_replacement:
-    "is_valid_subcircuit_replacement
-       circuit
-       operation_node_id
-       replacement"
+    "is_valid_subcircuit_replacement circuit operation_node_id replacement"
 
   assumes different_node:
     "other_node_id \<noteq> operation_node_id"
@@ -3214,116 +2214,20 @@ lemma replace_operation_by_subcircuit_preserves_unrelated_nodes:
 
   shows
     "nodes
-       (fst
-         (replace_operation_by_subcircuit
-            circuit
-            frontier
-            operation_node_id
-            replacement))
-       other_node_id
-     =
-     Some node"
-proof -
-  from valid_replacement obtain original_op where
-    operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode original_op)"
-    and compatible:
-      "is_compatible_subcircuit
-         (op_qargs original_op)
-         replacement"
-    unfolding is_valid_subcircuit_replacement_def
-    by auto
-
-  have allocation_valid:
-    "all_existing_node_ids_below_next_id circuit"
-    using valid_state
-    unfolding is_valid_construction_state_def
-    by simp
-
-  have other_id_below_next_id:
-    "node_id_to_nat other_node_id
-       < node_id_to_nat (next_id circuit)"
-    using allocation_valid original_node
-    unfolding all_existing_node_ids_below_next_id_def
-    by simp
-
-  have finite_interfaces:
-    "finite (subcircuit_interface_qubits replacement)"
-    using compatible
-      compatible_subcircuit_interface_qubits_finite
-    by blast
-
-  let ?circuit1 =
-    "remove_operation_node circuit operation_node_id"
-
-  let ?circuit2 =
-    "insert_subcircuit_nodes
-       circuit
-       ?circuit1
-       replacement"
-
-  let ?circuit3 =
-    "insert_subcircuit_internal_edges
-       circuit
-       ?circuit2
-       replacement"
-
-  let ?circuit4 =
-    "connect_subcircuit_inputs
-       circuit
-       ?circuit3
-       operation_node_id
-       replacement"
-
-  let ?circuit5 =
-    "connect_subcircuit_outputs
-       circuit
-       ?circuit4
-       operation_node_id
-       replacement"
-
-  have preserved_after_removal:
-    "nodes ?circuit1 other_node_id = Some node"
-    using different_node original_node
-    by simp
-
-  have preserved_after_node_insertion:
-    "nodes ?circuit2 other_node_id = Some node"
-    using
-      insert_subcircuit_nodes_preserves_node_below_next_id[
-        OF other_id_below_next_id,
-        of "?circuit1" replacement]
-      preserved_after_removal
-    by simp
-
-  have preserved_after_internal_edges:
-    "nodes ?circuit3 other_node_id = Some node"
-    using preserved_after_node_insertion
-    by simp
-
-  have preserved_after_input_connections:
-    "nodes ?circuit4 other_node_id = Some node"
-    using
-      connect_subcircuit_inputs_preserves_nodes
-      preserved_after_internal_edges
-      finite_interfaces
-    by simp
-
-  have preserved_after_output_connections:
-    "nodes ?circuit5 other_node_id = Some node"
-    using
-      finite_interfaces
-      preserved_after_node_insertion
-    by simp
-
-  show ?thesis
-    using preserved_after_output_connections
-    unfolding
-      replace_operation_by_subcircuit_def
-      Let_def
-    by simp
-qed
+       (fst (replace_operation_by_subcircuit circuit frontier operation_node_id replacement)) other_node_id
+     = Some node"
+  using
+    all_existing_node_ids_below_next_id_def
+    compatible_subcircuit_interface_qubits_finite
+    different_node
+    insert_subcircuit_nodes_preserves_node_below_next_id
+    is_valid_construction_state_def
+    is_valid_subcircuit_replacement_def
+    original_node
+    replace_operation_by_subcircuit_def
+    valid_replacement
+    valid_state
+  by fastforce
 
 lemma replace_operation_by_subcircuit_contains_renamed_internal_edges:
   (* Every internal edge of the replacement subcircuit appears in the
@@ -3337,17 +2241,14 @@ lemma replace_operation_by_subcircuit_contains_renamed_internal_edges:
 
   shows
     "rename_subcircuit_edge original_circuit e
-       \<in> edges
+       \<in> edges 
          (fst (replace_operation_by_subcircuit original_circuit frontier operation_node_id replacement))"
 proof -
   from valid_replacement obtain original_op where
     operation_exists:
-      "nodes original_circuit operation_node_id =
-         Some (OperationNode original_op)"
+      "nodes original_circuit operation_node_id = Some (OperationNode original_op)"
     and compatible:
-      "is_compatible_subcircuit
-         (op_qargs original_op)
-         replacement"
+      "is_compatible_subcircuit (op_qargs original_op) replacement"
     unfolding is_valid_subcircuit_replacement_def
     by auto
 
@@ -3361,36 +2262,15 @@ proof -
   let ?renamed_edge =
     "rename_subcircuit_edge original_circuit e"
 
-  let ?circuit1 =
-    "remove_operation_node
-       original_circuit
-       operation_node_id"
+  let ?circuit1 = "remove_operation_node original_circuit operation_node_id"
 
-  let ?circuit2 =
-    "insert_subcircuit_nodes
-       original_circuit
-       ?circuit1
-       replacement"
+  let ?circuit2 = "insert_subcircuit_nodes original_circuit ?circuit1 replacement"
 
-  let ?circuit3 =
-    "insert_subcircuit_internal_edges
-       original_circuit
-       ?circuit2
-       replacement"
+  let ?circuit3 = "insert_subcircuit_internal_edges original_circuit ?circuit2 replacement"
 
-  let ?circuit4 =
-    "connect_subcircuit_inputs
-       original_circuit
-       ?circuit3
-       operation_node_id
-       replacement"
+  let ?circuit4 = "connect_subcircuit_inputs original_circuit ?circuit3 operation_node_id replacement"
 
-  let ?circuit5 =
-    "connect_subcircuit_outputs
-       original_circuit
-       ?circuit4
-       operation_node_id
-       replacement"
+  let ?circuit5 = "connect_subcircuit_outputs original_circuit ?circuit4 operation_node_id replacement"
 
   have inserted_internal_edge:
     "?renamed_edge \<in> edges ?circuit3"
@@ -3399,16 +2279,7 @@ proof -
 
   have input_step_preserves_edge:
     "edge_to_preserve \<in> edges circuit
-     \<Longrightarrow>
-     edge_to_preserve
-       \<in>
-       edges
-         (connect_subcircuit_input_on_wire
-            original_circuit
-            operation_node_id
-            replacement
-            q
-            circuit)"
+     \<Longrightarrow> edge_to_preserve \<in> edges (connect_subcircuit_input_on_wire original_circuit operation_node_id replacement q circuit)"
     for edge_to_preserve circuit q
 
     unfolding
@@ -3427,60 +2298,33 @@ proof -
     for interface_qubits circuit edge_to_preserve
 
   proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
-
     case empty
 
     then show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
-    let ?connect =
-      "connect_subcircuit_input_on_wire
-         original_circuit
-         operation_node_id
-         replacement"
+    let ?connect = "connect_subcircuit_input_on_wire original_circuit operation_node_id replacement"
 
     have edge_after_remaining_wires:
-      "edge_to_preserve
-         \<in>
-         edges
-           (Finite_Set.fold
-              ?connect
-              circuit
-              interface_qubits)"
+      "edge_to_preserve \<in> edges (Finite_Set.fold ?connect circuit interface_qubits)"
       using
         insert.IH
         insert.prems
       by simp
 
     have edge_after_current_wire:
-      "edge_to_preserve
-         \<in>
-         edges
-           (?connect q
-             (Finite_Set.fold
-                ?connect
-                circuit
-                interface_qubits))"
+      "edge_to_preserve \<in> edges (?connect q (Finite_Set.fold ?connect circuit interface_qubits))"
       using
         edge_after_remaining_wires
         input_step_preserves_edge
       by blast
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect
-         circuit
-         (insert q interface_qubits)
-       =
-       ?connect q
-         (Finite_Set.fold
-            ?connect
-            circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect circuit (insert q interface_qubits)
+       = ?connect q (Finite_Set.fold ?connect circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_input.fold_insert)
 
@@ -3502,17 +2346,8 @@ proof -
     by blast
 
   have output_step_preserves_edge:
-    "edge_to_preserve \<in> edges circuit
-     \<Longrightarrow>
-     edge_to_preserve
-       \<in>
-       edges
-         (connect_subcircuit_output_on_wire
-            original_circuit
-            operation_node_id
-            replacement
-            q
-            circuit)"
+    "edge_to_preserve \<in> edges circuit 
+     \<Longrightarrow> edge_to_preserve \<in> edges (connect_subcircuit_output_on_wire original_circuit operation_node_id replacement q circuit)"
     for edge_to_preserve circuit q
 
     unfolding
@@ -3522,76 +2357,38 @@ proof -
 
   have output_fold_preserves_edge:
     "finite interface_qubits
-     \<Longrightarrow>
-     edge_to_preserve \<in> edges circuit
-     \<Longrightarrow>
-     edge_to_preserve
-       \<in>
-       edges
-         (Finite_Set.fold
-            (connect_subcircuit_output_on_wire
-               original_circuit
-               operation_node_id
-               replacement)
-            circuit
-            interface_qubits)"
+     \<Longrightarrow>edge_to_preserve \<in> edges circuit
+     \<Longrightarrow> edge_to_preserve
+         \<in> edges (Finite_Set.fold (connect_subcircuit_output_on_wire original_circuit operation_node_id replacement) circuit interface_qubits)"
+    
     for interface_qubits circuit edge_to_preserve
-
   proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
-
     case empty
 
     then show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
-
-    let ?connect =
-      "connect_subcircuit_output_on_wire
-         original_circuit
-         operation_node_id
-         replacement"
+    let ?connect = "connect_subcircuit_output_on_wire original_circuit operation_node_id replacement"
 
     have edge_after_remaining_wires:
-      "edge_to_preserve
-         \<in>
-         edges
-           (Finite_Set.fold
-              ?connect
-              circuit
-              interface_qubits)"
+      "edge_to_preserve \<in> edges (Finite_Set.fold ?connect circuit interface_qubits)"
       using
         insert.IH
         insert.prems
       by simp
 
     have edge_after_current_wire:
-      "edge_to_preserve
-         \<in>
-         edges
-           (?connect q
-             (Finite_Set.fold
-                ?connect
-                circuit
-                interface_qubits))"
+      "edge_to_preserve \<in> edges (?connect q (Finite_Set.fold ?connect circuit interface_qubits))"
       using
         edge_after_remaining_wires
         output_step_preserves_edge
       by blast
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect
-         circuit
-         (insert q interface_qubits)
-       =
-       ?connect q
-         (Finite_Set.fold
-            ?connect
-            circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect circuit (insert q interface_qubits)
+       = ?connect q (Finite_Set.fold ?connect circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_output.fold_insert)
 
@@ -3625,46 +2422,23 @@ lemma replace_operation_by_subcircuit_connects_inputs:
      is connected to the renamed input-interface node of the inserted
      subcircuit. *)
   assumes valid_replacement:
-    "is_valid_subcircuit_replacement
-       original_circuit
-       operation_node_id
-       replacement"
+    "is_valid_subcircuit_replacement original_circuit operation_node_id replacement"
 
   assumes predecessor:
-    "predecessor_on_wire
-       original_circuit
-       operation_node_id
-       q
-     =
-     Some predecessor_node"
+    "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_node"
 
   assumes input_interface:
     "input_interface replacement q = Some local_input_node"
 
   shows
-    "make_edge
-       predecessor_node
-       (rename_subcircuit_node_id
-          original_circuit
-          local_input_node)
-       q
-     \<in>
-     edges
-       (fst
-         (replace_operation_by_subcircuit
-            original_circuit
-            frontier
-            operation_node_id
-            replacement))"
+    "make_edge predecessor_node (rename_subcircuit_node_id original_circuit local_input_node) q
+       \<in> edges (fst (replace_operation_by_subcircuit original_circuit frontier operation_node_id replacement))"
 proof -
   from valid_replacement obtain original_op where
     operation_exists:
-      "nodes original_circuit operation_node_id =
-         Some (OperationNode original_op)"
+      "nodes original_circuit operation_node_id = Some (OperationNode original_op)"
     and compatible:
-      "is_compatible_subcircuit
-         (op_qargs original_op)
-         replacement"
+      "is_compatible_subcircuit (op_qargs original_op) replacement"
     unfolding is_valid_subcircuit_replacement_def
     by blast
 
@@ -3680,37 +2454,18 @@ proof -
     by simp
 
   have renamed_input:
-    "renamed_input_interface
-       original_circuit
-       replacement
-       q
-     =
-     Some
-       (rename_subcircuit_node_id
-          original_circuit
-          local_input_node)"
+    "renamed_input_interface original_circuit replacement q
+     = Some (rename_subcircuit_node_id original_circuit local_input_node)"
     using input_interface
     unfolding renamed_input_interface_def
     by simp
 
-  let ?new_edge =
-    "make_edge
-       predecessor_node
-       (rename_subcircuit_node_id
-          original_circuit
-          local_input_node)
-       q"
+  let ?new_edge = "make_edge predecessor_node (rename_subcircuit_node_id original_circuit local_input_node) q"
 
-  let ?connect_input =
-    "connect_subcircuit_input_on_wire
-       original_circuit
-       operation_node_id
-       replacement"
+  let ?connect_input = "connect_subcircuit_input_on_wire original_circuit operation_node_id replacement"
 
   have input_step_preserves_edge:
-    "e \<in> edges circuit
-     \<Longrightarrow>
-     e \<in> edges (?connect_input wire circuit)"
+    "e \<in> edges circuit \<Longrightarrow> e \<in> edges (?connect_input wire circuit)"
     for e circuit wire
     unfolding
       connect_subcircuit_input_on_wire_def
@@ -3728,45 +2483,21 @@ proof -
 
   have input_fold_contains_edge:
     "finite interface_qubits
-     \<Longrightarrow>
-     q \<in> interface_qubits
-     \<Longrightarrow>
-     ?new_edge
-       \<in>
-       edges
-         (Finite_Set.fold
-            ?connect_input
-            circuit
-            interface_qubits)"
+     \<Longrightarrow> q \<in> interface_qubits
+     \<Longrightarrow> ?new_edge \<in> edges (Finite_Set.fold ?connect_input circuit interface_qubits)"
     for interface_qubits circuit
     using 
       connect_subcircuit_input.fold_rec
       selected_input_step_adds_edge
     by simp
 
-  let ?circuit1 =
-    "remove_operation_node
-       original_circuit
-       operation_node_id"
+  let ?circuit1 = "remove_operation_node original_circuit operation_node_id"
 
-  let ?circuit2 =
-    "insert_subcircuit_nodes
-       original_circuit
-       ?circuit1
-       replacement"
+  let ?circuit2 = "insert_subcircuit_nodes original_circuit ?circuit1 replacement"
 
-  let ?circuit3 =
-    "insert_subcircuit_internal_edges
-       original_circuit
-       ?circuit2
-       replacement"
+  let ?circuit3 = "insert_subcircuit_internal_edges original_circuit ?circuit2 replacement"
 
-  let ?circuit4 =
-    "connect_subcircuit_inputs
-       original_circuit
-       ?circuit3
-       operation_node_id
-       replacement"
+  let ?circuit4 = "connect_subcircuit_inputs original_circuit ?circuit3 operation_node_id replacement"
 
   have edge_after_inputs:
     "?new_edge \<in> edges ?circuit4"
@@ -3777,16 +2508,10 @@ proof -
       input_fold_contains_edge
     by simp
 
-  let ?connect_output =
-    "connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node_id
-       replacement"
+  let ?connect_output = "connect_subcircuit_output_on_wire original_circuit operation_node_id replacement"
 
   have output_step_preserves_edge:
-    "e \<in> edges circuit
-     \<Longrightarrow>
-     e \<in> edges (?connect_output wire circuit)"
+    "e \<in> edges circuit \<Longrightarrow> e \<in> edges (?connect_output wire circuit)"
     for e circuit wire
     unfolding
       connect_subcircuit_output_on_wire_def
@@ -3795,62 +2520,32 @@ proof -
 
   have output_fold_preserves_edge:
     "finite interface_qubits
-     \<Longrightarrow>
-     e \<in> edges circuit
-     \<Longrightarrow>
-     e
-       \<in>
-       edges
-         (Finite_Set.fold
-            ?connect_output
-            circuit
-            interface_qubits)"
+     \<Longrightarrow> e \<in> edges circuit
+     \<Longrightarrow> e \<in> edges (Finite_Set.fold ?connect_output circuit interface_qubits)"
     for interface_qubits circuit e
+ 
   proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
-
     case empty
 
     then show ?case
       by simp
 
   next
-
     case (insert wire interface_qubits)
 
-    have fold_insert:
-      "Finite_Set.fold
-         ?connect_output
-         circuit
-         (insert wire interface_qubits)
-       =
-       ?connect_output wire
-         (Finite_Set.fold
-            ?connect_output
-            circuit
-            interface_qubits)"
+    have fold_insert: 
+      "Finite_Set.fold ?connect_output circuit (insert wire interface_qubits)
+       = ?connect_output wire (Finite_Set.fold ?connect_output circuit interface_qubits)"
       using insert.hyps(1, 2)
       by (rule connect_subcircuit_output.fold_insert)
 
     have edge_after_remaining:
-      "e
-        \<in>
-        edges
-          (Finite_Set.fold
-             ?connect_output
-             circuit
-             interface_qubits)"
+      "e \<in> edges (Finite_Set.fold ?connect_output circuit interface_qubits)"
       using insert.IH insert.prems
       by simp
 
     have edge_after_current:
-      "e
-        \<in>
-        edges
-          (?connect_output wire
-            (Finite_Set.fold
-               ?connect_output
-               circuit
-               interface_qubits))"
+      "e \<in> edges (?connect_output wire (Finite_Set.fold ?connect_output circuit interface_qubits))"
       using edge_after_remaining
       by (rule output_step_preserves_edge)
 
@@ -3859,12 +2554,7 @@ proof -
       using edge_after_current .
   qed
 
-  let ?circuit5 =
-    "connect_subcircuit_outputs
-       original_circuit
-       ?circuit4
-       operation_node_id
-       replacement"
+  let ?circuit5 = "connect_subcircuit_outputs original_circuit ?circuit4 operation_node_id replacement"
 
   have edge_after_outputs:
     "?new_edge \<in> edges ?circuit5"
@@ -3888,46 +2578,23 @@ lemma replace_operation_by_subcircuit_connects_outputs:
      inserted subcircuit is connected to the successor of the removed
      operation. *)
   assumes valid_replacement:
-    "is_valid_subcircuit_replacement
-       original_circuit
-       operation_node_id
-       replacement"
+    "is_valid_subcircuit_replacement original_circuit operation_node_id replacement"
 
   assumes successor:
-    "successor_on_wire
-       original_circuit
-       operation_node_id
-       q
-     =
-     Some successor_node"
+    "successor_on_wire original_circuit operation_node_id q = Some successor_node"
 
   assumes output_interface:
     "output_interface replacement q = Some local_output_node"
 
   shows
-    "make_edge
-       (rename_subcircuit_node_id
-          original_circuit
-          local_output_node)
-       successor_node
-       q
-     \<in>
-     edges
-       (fst
-         (replace_operation_by_subcircuit
-            original_circuit
-            frontier
-            operation_node_id
-            replacement))"
+    "make_edge (rename_subcircuit_node_id original_circuit local_output_node) successor_node q
+       \<in> edges (fst (replace_operation_by_subcircuit original_circuit frontier operation_node_id replacement))"
 proof -
   from valid_replacement obtain original_op where
     operation_exists:
-      "nodes original_circuit operation_node_id =
-         Some (OperationNode original_op)"
-    and compatible:
-      "is_compatible_subcircuit
-         (op_qargs original_op)
-         replacement"
+      "nodes original_circuit operation_node_id = Some (OperationNode original_op)"
+    and compatible: 
+      "is_compatible_subcircuit (op_qargs original_op) replacement"
     unfolding is_valid_subcircuit_replacement_def
     by auto
 
@@ -3948,37 +2615,18 @@ proof -
 
 
   have renamed_output:
-    "renamed_output_interface
-       original_circuit
-       replacement
-       q
-     =
-     Some
-       (rename_subcircuit_node_id
-          original_circuit
-          local_output_node)"
+    "renamed_output_interface original_circuit replacement q
+     = Some (rename_subcircuit_node_id original_circuit local_output_node)"
     using output_interface
     unfolding renamed_output_interface_def
     by simp
 
-  let ?new_edge =
-    "make_edge
-       (rename_subcircuit_node_id
-          original_circuit
-          local_output_node)
-       successor_node
-       q"
+  let ?new_edge = "make_edge (rename_subcircuit_node_id original_circuit local_output_node) successor_node q"
 
-  let ?connect_output =
-    "connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node_id
-       replacement"
+  let ?connect_output = "connect_subcircuit_output_on_wire original_circuit operation_node_id replacement"
 
   have output_step_preserves_edge:
-    "e \<in> edges circuit
-     \<Longrightarrow>
-     e \<in> edges (?connect_output wire circuit)"
+    "e \<in> edges circuit \<Longrightarrow> e \<in> edges (?connect_output wire circuit)"
     for e circuit wire
     unfolding
       connect_subcircuit_output_on_wire_def
@@ -3996,147 +2644,44 @@ proof -
 
   have output_fold_contains_edge:
     "finite interface_qubits
-     \<Longrightarrow>
-     q \<in> interface_qubits
-     \<Longrightarrow>
-     ?new_edge
-       \<in>
-       edges
-         (Finite_Set.fold
-            ?connect_output
-            circuit
-            interface_qubits)"
+     \<Longrightarrow> q \<in> interface_qubits
+     \<Longrightarrow> ?new_edge \<in> edges (Finite_Set.fold ?connect_output circuit interface_qubits)"
     for interface_qubits circuit
   proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
-
     case empty
 
     then show ?case
       by simp
 
   next
-
     case (insert wire interface_qubits)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect_output
-         circuit
-         (insert wire interface_qubits)
-       =
-       ?connect_output wire
-         (Finite_Set.fold
-            ?connect_output
-            circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect_output circuit (insert wire interface_qubits)
+       = ?connect_output wire (Finite_Set.fold ?connect_output circuit interface_qubits)"
       using insert.hyps(1, 2)
       by (rule connect_subcircuit_output.fold_insert)
 
     show ?case
-    proof (cases "wire = q")
-
-      case True
-
-      have edge_after_current:
-        "?new_edge
-          \<in>
-          edges
-            (?connect_output wire
-              (Finite_Set.fold
-                 ?connect_output
-                 circuit
-                 interface_qubits))"
-        using True selected_output_step_adds_edge
-        by simp
-
-      show ?thesis
-        unfolding fold_insert
-        using edge_after_current .
-
-    next
-
-      case False
-
-      have q_in_remaining:
-        "q \<in> interface_qubits"
-        using insert.prems False
-        by simp
-
-      have edge_after_remaining:
-        "?new_edge
-          \<in>
-          edges
-            (Finite_Set.fold
-               ?connect_output
-               circuit
-               interface_qubits)"
-        using insert.IH q_in_remaining
-        by simp
-
-      have edge_after_current:
-        "?new_edge
-          \<in>
-          edges
-            (?connect_output wire
-              (Finite_Set.fold
-                 ?connect_output
-                 circuit
-                 interface_qubits))"
-        using edge_after_remaining
-        by (rule output_step_preserves_edge)
-
-      show ?thesis
-        unfolding fold_insert
-        using edge_after_current .
-    qed
+      using
+        fold_insert
+        insert.IH
+        insert.prems
+        output_step_preserves_edge
+        selected_output_step_adds_edge
+      by auto
   qed
-
-  let ?circuit1 =
-    "remove_operation_node
-       original_circuit
-       operation_node_id"
-
-  let ?circuit2 =
-    "insert_subcircuit_nodes
-       original_circuit
-       ?circuit1
-       replacement"
-
-  let ?circuit3 =
-    "insert_subcircuit_internal_edges
-       original_circuit
-       ?circuit2
-       replacement"
-
-  let ?circuit4 =
-    "connect_subcircuit_inputs
-       original_circuit
-       ?circuit3
-       operation_node_id
-       replacement"
-
-  let ?circuit5 =
-    "connect_subcircuit_outputs
-       original_circuit
-       ?circuit4
-       operation_node_id
-       replacement"
-
-  have edge_after_outputs:
-    "?new_edge \<in> edges ?circuit5"
-    unfolding connect_subcircuit_outputs_def
-    using
-      finite_interfaces
-      q_in_interfaces
-      output_fold_contains_edge
-    by blast
 
   show ?thesis
     unfolding
       replace_operation_by_subcircuit_def
       Let_def
-    using edge_after_outputs
-    by simp
+    using
+      connect_subcircuit_outputs_def
+      finite_interfaces
+      output_fold_contains_edge
+      q_in_interfaces
+    by simp  
 qed
 
 lemma replace_operation_by_subcircuit_preserves_unrelated_edges:
@@ -4157,16 +2702,13 @@ lemma replace_operation_by_subcircuit_preserves_unrelated_edges:
   shows
     "e \<in> edges
         (fst (replace_operation_by_subcircuit original_circuit frontier operation_node_id replacement))"
-proof -
 
+proof -
   from valid_replacement obtain original_op where
     operation_exists:
-      "nodes original_circuit operation_node_id =
-        Some (OperationNode original_op)"
+      "nodes original_circuit operation_node_id = Some (OperationNode original_op)"
     and compatible:
-      "is_compatible_subcircuit
-        (op_qargs original_op)
-        replacement"
+      "is_compatible_subcircuit (op_qargs original_op) replacement"
     unfolding is_valid_subcircuit_replacement_def
     by blast
 
@@ -4175,37 +2717,16 @@ proof -
     using compatible
     by (rule compatible_subcircuit_interface_qubits_finite)
 
-  let ?circuit1 =
-    "remove_operation_node
-      original_circuit
-      operation_node_id"
+  let ?circuit1 = "remove_operation_node original_circuit operation_node_id" 
 
-  let ?circuit2 =
-    "insert_subcircuit_nodes
-      original_circuit
-      ?circuit1
-      replacement"
+  let ?circuit2 = "insert_subcircuit_nodes original_circuit ?circuit1 replacement"
 
-  let ?circuit3 =
-    "insert_subcircuit_internal_edges
-      original_circuit
-      ?circuit2
-      replacement"
+  let ?circuit3 = "insert_subcircuit_internal_edges original_circuit ?circuit2 replacement"
 
-  let ?circuit4 =
-    "connect_subcircuit_inputs
-      original_circuit
-      ?circuit3
-      operation_node_id
-      replacement"
+  let ?circuit4 = "connect_subcircuit_inputs original_circuit ?circuit3 operation_node_id replacement"
 
-  let ?circuit5 =
-    "connect_subcircuit_outputs
-      original_circuit
-      ?circuit4
-      operation_node_id
-      replacement"
-
+  let ?circuit5 = "connect_subcircuit_outputs original_circuit ?circuit4 operation_node_id replacement"
+ 
   have edge_after_removal:
     "e \<in> edges ?circuit1"
     using
@@ -4228,15 +2749,9 @@ proof -
 
   have input_step_preserves_edge:
     "edge_to_preserve \<in> edges circuit
-     \<Longrightarrow>
-     edge_to_preserve
-       \<in> edges
-           (connect_subcircuit_input_on_wire
-              original_circuit
-              operation_node_id
-              replacement
-              q
-              circuit)"
+     \<Longrightarrow> edge_to_preserve
+         \<in> edges (connect_subcircuit_input_on_wire original_circuit operation_node_id replacement q circuit)"
+    
     for edge_to_preserve circuit q
     unfolding
       connect_subcircuit_input_on_wire_def
@@ -4245,74 +2760,43 @@ proof -
 
   have input_fold_preserves_edge:
     "finite interface_qubits
-     \<Longrightarrow>
-     edge_to_preserve \<in> edges circuit
-     \<Longrightarrow>
-     edge_to_preserve
+     \<Longrightarrow> edge_to_preserve \<in> edges circuit
+     \<Longrightarrow> edge_to_preserve
        \<in> edges
-           (Finite_Set.fold
-              (connect_subcircuit_input_on_wire
-                 original_circuit
-                 operation_node_id
-                 replacement)
-              circuit
-              interface_qubits)"
+           (Finite_Set.fold 
+              (connect_subcircuit_input_on_wire original_circuit operation_node_id replacement) circuit interface_qubits)"
     for interface_qubits circuit edge_to_preserve
   proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
-
     case empty
 
     then show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
-    let ?connect =
-      "connect_subcircuit_input_on_wire
-         original_circuit
-         operation_node_id
-         replacement"
+    let ?connect = "connect_subcircuit_input_on_wire original_circuit operation_node_id replacement"
 
     have edge_after_remaining:
-      "edge_to_preserve
-         \<in> edges
-             (Finite_Set.fold
-                ?connect
-                circuit
-                interface_qubits)"
+      "edge_to_preserve \<in> edges (Finite_Set.fold ?connect circuit interface_qubits)"
       using insert.IH insert.prems
       by blast
 
     have edge_after_q:
-      "edge_to_preserve
-         \<in> edges
-             (?connect q
-                (Finite_Set.fold
-                   ?connect
-                   circuit
-                   interface_qubits))"
+      "edge_to_preserve \<in> edges (?connect q (Finite_Set.fold ?connect circuit interface_qubits))"
       using edge_after_remaining
       by (rule input_step_preserves_edge)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect
-         circuit
-         (insert q interface_qubits)
-       =
-       ?connect q
-         (Finite_Set.fold
-            ?connect
-            circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect circuit (insert q interface_qubits)
+       = ?connect q (Finite_Set.fold ?connect circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_input.fold_insert)
 
     show ?case
       using edge_after_q
-      unfolding fold_insert .
+      unfolding fold_insert
+      by simp
   qed
 
   have edge_after_inputs:
@@ -4326,15 +2810,8 @@ proof -
 
     have output_step_preserves_edge:
     "edge_to_preserve \<in> edges circuit
-     \<Longrightarrow>
-     edge_to_preserve
-       \<in> edges
-           (connect_subcircuit_output_on_wire
-              original_circuit
-              operation_node_id
-              replacement
-              q
-              circuit)"
+     \<Longrightarrow> edge_to_preserve
+       \<in> edges (connect_subcircuit_output_on_wire original_circuit operation_node_id replacement q circuit)"
     for edge_to_preserve circuit q
     unfolding
       connect_subcircuit_output_on_wire_def
@@ -4343,70 +2820,39 @@ proof -
 
   have output_fold_preserves_edge:
     "finite interface_qubits
-     \<Longrightarrow>
-     edge_to_preserve \<in> edges circuit
-     \<Longrightarrow>
-     edge_to_preserve
+     \<Longrightarrow> edge_to_preserve \<in> edges circuit
+     \<Longrightarrow> edge_to_preserve
        \<in> edges
-           (Finite_Set.fold
-              (connect_subcircuit_output_on_wire
-                 original_circuit
-                 operation_node_id
-                 replacement)
-              circuit
-              interface_qubits)"
+           (Finite_Set.fold 
+             (connect_subcircuit_output_on_wire original_circuit operation_node_id replacement) circuit interface_qubits)"
     for interface_qubits circuit edge_to_preserve
-  proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
 
+  proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
     case empty
 
     then show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
-    let ?connect =
-      "connect_subcircuit_output_on_wire
-         original_circuit
-         operation_node_id
-         replacement"
+    let ?connect = "connect_subcircuit_output_on_wire original_circuit operation_node_id replacement"
 
     have edge_after_remaining:
-      "edge_to_preserve
-         \<in> edges
-             (Finite_Set.fold
-                ?connect
-                circuit
-                interface_qubits)"
+      "edge_to_preserve \<in> edges (Finite_Set.fold ?connect circuit interface_qubits)"
       using
         insert.IH
         insert.prems
       by simp
 
     have edge_after_q:
-      "edge_to_preserve
-         \<in> edges
-             (?connect q
-                (Finite_Set.fold
-                   ?connect
-                   circuit
-                   interface_qubits))"
+      "edge_to_preserve \<in> edges (?connect q (Finite_Set.fold ?connect circuit interface_qubits))"
       using edge_after_remaining
       by (rule output_step_preserves_edge)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect
-         circuit
-         (insert q interface_qubits)
-       =
-       ?connect q
-         (Finite_Set.fold
-            ?connect
-            circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect circuit (insert q interface_qubits)
+       = ?connect q (Finite_Set.fold ?connect circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_output.fold_insert)
 
@@ -4442,36 +2888,19 @@ lemma replace_operation_by_subcircuit_node_cases:
     "is_valid_construction_state original_circuit frontier"
 
   assumes valid_replacement:
-    "is_valid_subcircuit_replacement
-       original_circuit
-       operation_node_id
-       replacement"
+    "is_valid_subcircuit_replacement original_circuit operation_node_id replacement"
 
   assumes node_in_result:
-    "nodes
-       (fst
-         (replace_operation_by_subcircuit
-            original_circuit
-            frontier
-            operation_node_id
-            replacement))
-       node_id
-     =
-     Some node"
+    "nodes (fst(replace_operation_by_subcircuit original_circuit frontier operation_node_id replacement)) node_id
+     = Some node"
 
   shows
     "(node_id \<noteq> operation_node_id
       \<and> nodes original_circuit node_id = Some node)
-     \<or>
-     (\<exists>local_node_id.
-        local_node_id \<in> subcircuit_operation_node_ids replacement
-        \<and>
-        node_id =
-          rename_subcircuit_node_id
-            original_circuit
-            local_node_id
-        \<and>
-        nodes (subgraph replacement) local_node_id = Some node)"
+      \<or> (\<exists>local_node_id.
+          local_node_id \<in> subcircuit_operation_node_ids replacement
+          \<and> node_id = rename_subcircuit_node_id original_circuit local_node_id
+          \<and> nodes (subgraph replacement) local_node_id = Some node)"
 
 proof -
   let ?circuit1 =
@@ -4553,91 +2982,35 @@ lemma replace_operation_by_subcircuit_edge_cases:
        4. an output-interface reconnection edge.
   *)
   assumes valid_replacement:
-    "is_valid_subcircuit_replacement
-       original_circuit
-       operation_node_id
-       replacement"
+    "is_valid_subcircuit_replacement original_circuit operation_node_id replacement"
 
   assumes edge_in_result:
-    "e \<in>
-       edges
-         (fst
-           (replace_operation_by_subcircuit
-              original_circuit
-              frontier
-              operation_node_id
-              replacement))"
+    "e \<in> edges (fst (replace_operation_by_subcircuit original_circuit frontier operation_node_id replacement))"
 
   shows
     "(e \<in> edges original_circuit
       \<and> edge_source e \<noteq> operation_node_id
       \<and> edge_target e \<noteq> operation_node_id)
 
-     \<or>
+     \<or> e \<in> renamed_subcircuit_internal_edges original_circuit replacement
+     \<or> (\<exists>q predecessor_node renamed_input_node.
+         q \<in> subcircuit_interface_qubits replacement
+        \<and> predecessor_on_wire original_circuit operation_node_id q = Some predecessor_node
+        \<and> renamed_input_interface original_circuit replacement q = Some renamed_input_node
+        \<and> e = make_edge predecessor_node renamed_input_node q)
 
-     e \<in> renamed_subcircuit_internal_edges
-              original_circuit
-              replacement
-
-     \<or>
-
-     (\<exists>q predecessor_node renamed_input_node.
+     \<or> (\<exists>q renamed_output_node successor_node.
         q \<in> subcircuit_interface_qubits replacement
-        \<and>
-        predecessor_on_wire
-          original_circuit
-          operation_node_id
-          q
-        =
-        Some predecessor_node
-        \<and>
-        renamed_input_interface
-          original_circuit
-          replacement
-          q
-        =
-        Some renamed_input_node
-        \<and>
-        e =
-          make_edge
-            predecessor_node
-            renamed_input_node
-            q)
+        \<and> renamed_output_interface original_circuit replacement q = Some renamed_output_node
+        \<and> successor_on_wire original_circuit operation_node_id q = Some successor_node
+        \<and> e = make_edge renamed_output_node successor_node q)"
 
-     \<or>
-
-     (\<exists>q renamed_output_node successor_node.
-        q \<in> subcircuit_interface_qubits replacement
-        \<and>
-        renamed_output_interface
-          original_circuit
-          replacement
-          q
-        =
-        Some renamed_output_node
-        \<and>
-        successor_on_wire
-          original_circuit
-          operation_node_id
-          q
-        =
-        Some successor_node
-        \<and>
-        e =
-          make_edge
-            renamed_output_node
-            successor_node
-            q)"
 proof -
-
   from valid_replacement obtain original_op where
     operation_exists:
-      "nodes original_circuit operation_node_id =
-         Some (OperationNode original_op)"
+      "nodes original_circuit operation_node_id = Some (OperationNode original_op)"
     and compatible:
-      "is_compatible_subcircuit
-         (op_qargs original_op)
-         replacement"
+      "is_compatible_subcircuit (op_qargs original_op) replacement"
     unfolding is_valid_subcircuit_replacement_def
     by blast
 
@@ -4646,36 +3019,15 @@ proof -
     using compatible
     by (rule compatible_subcircuit_interface_qubits_finite)
 
-  let ?circuit1 =
-    "remove_operation_node
-       original_circuit
-       operation_node_id"
+  let ?circuit1 = "remove_operation_node original_circuit operation_node_id"
 
-  let ?circuit2 =
-    "insert_subcircuit_nodes
-       original_circuit
-       ?circuit1
-       replacement"
+  let ?circuit2 = "insert_subcircuit_nodes original_circuit ?circuit1 replacement"
 
-  let ?circuit3 =
-    "insert_subcircuit_internal_edges
-       original_circuit
-       ?circuit2
-       replacement"
+  let ?circuit3 = "insert_subcircuit_internal_edges original_circuit ?circuit2 replacement"
 
-  let ?circuit4 =
-    "connect_subcircuit_inputs
-       original_circuit
-       ?circuit3
-       operation_node_id
-       replacement"
+  let ?circuit4 = "connect_subcircuit_inputs original_circuit ?circuit3 operation_node_id replacement"
 
-  let ?circuit5 =
-    "connect_subcircuit_outputs
-       original_circuit
-       ?circuit4
-       operation_node_id
-       replacement"
+  let ?circuit5 = "connect_subcircuit_outputs original_circuit ?circuit4 operation_node_id replacement"
 
   have edge_in_circuit5:
     "e \<in> edges ?circuit5"
@@ -4685,43 +3037,17 @@ proof -
       Let_def
     by simp
 
-  let ?connect_input =
-    "connect_subcircuit_input_on_wire
-       original_circuit
-       operation_node_id
-       replacement"
+  let ?connect_input = "connect_subcircuit_input_on_wire original_circuit operation_node_id replacement"
 
-  let ?connect_output =
-    "connect_subcircuit_output_on_wire
-       original_circuit
-       operation_node_id
-       replacement"
+  let ?connect_output = "connect_subcircuit_output_on_wire original_circuit operation_node_id replacement"
 
   have input_step_cases:
     "edge_to_classify \<in> edges (?connect_input q circuit)
-     \<Longrightarrow>
-     edge_to_classify \<in> edges circuit
-       \<or>
-       (\<exists>predecessor_node renamed_input_node.
-          predecessor_on_wire
-            original_circuit
-            operation_node_id
-            q
-          =
-          Some predecessor_node
-          \<and>
-          renamed_input_interface
-            original_circuit
-            replacement
-            q
-          =
-          Some renamed_input_node
-          \<and>
-          edge_to_classify =
-            make_edge
-              predecessor_node
-              renamed_input_node
-              q)"
+     \<Longrightarrow> edge_to_classify \<in> edges circuit
+       \<or> (\<exists>predecessor_node renamed_input_node.
+          predecessor_on_wire original_circuit operation_node_id q = Some predecessor_node
+          \<and> renamed_input_interface original_circuit replacement q = Some renamed_input_node
+          \<and> edge_to_classify = make_edge predecessor_node renamed_input_node q)"
     for edge_to_classify circuit q
     unfolding
       connect_subcircuit_input_on_wire_def
@@ -4730,184 +3056,49 @@ proof -
 
   have input_fold_cases:
     "finite interface_qubits
-     \<Longrightarrow>
-     edge_to_classify
-       \<in>
-       edges
-         (Finite_Set.fold
-            ?connect_input
-            circuit
-            interface_qubits)
-     \<Longrightarrow>
-     edge_to_classify \<in> edges circuit
+     \<Longrightarrow> edge_to_classify \<in> edges (Finite_Set.fold ?connect_input circuit interface_qubits)
+     \<Longrightarrow> edge_to_classify \<in> edges circuit
        \<or>
        (\<exists>q predecessor_node renamed_input_node.
           q \<in> interface_qubits
-          \<and>
-          predecessor_on_wire
-            original_circuit
-            operation_node_id
-            q
-          =
-          Some predecessor_node
-          \<and>
-          renamed_input_interface
-            original_circuit
-            replacement
-            q
-          =
-          Some renamed_input_node
-          \<and>
-          edge_to_classify =
-            make_edge
-              predecessor_node
-              renamed_input_node
-              q)"
+          \<and> predecessor_on_wire original_circuit operation_node_id q = Some predecessor_node
+          \<and> renamed_input_interface original_circuit replacement q = Some renamed_input_node
+          \<and> edge_to_classify = make_edge predecessor_node renamed_input_node q)"
     for interface_qubits circuit edge_to_classify
   proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
-
     case empty
 
     then show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect_input
-         circuit
-         (insert q interface_qubits)
-       =
-       ?connect_input q
-         (Finite_Set.fold
-            ?connect_input
-            circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect_input circuit (insert q interface_qubits)
+       = ?connect_input q (Finite_Set.fold ?connect_input circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_input.fold_insert)
 
     have edge_after_q:
-      "edge_to_classify
-         \<in>
-         edges
-           (?connect_input q
-             (Finite_Set.fold
-                ?connect_input
-                circuit
-                interface_qubits))"
+      "edge_to_classify \<in> edges (?connect_input q (Finite_Set.fold ?connect_input circuit interface_qubits))"
       using insert.prems
-      unfolding fold_insert .
+      unfolding fold_insert
+      by simp
 
     from input_step_cases[OF edge_after_q]
     show ?case
-    proof
-
-      assume edge_before_q:
-        "edge_to_classify
-           \<in>
-           edges
-             (Finite_Set.fold
-                ?connect_input
-                circuit
-                interface_qubits)"
-
-      from insert.IH[OF edge_before_q]
-      show ?thesis
-      proof
-
-        assume base_edge:
-          "edge_to_classify \<in> edges circuit"
-
-        then show ?thesis
-          by blast
-
-      next
-
-        assume earlier_input_edge:
-          "\<exists>r predecessor_node renamed_input_node.
-             r \<in> interface_qubits
-             \<and>
-             predecessor_on_wire
-               original_circuit
-               operation_node_id
-               r
-             =
-             Some predecessor_node
-             \<and>
-             renamed_input_interface
-               original_circuit
-               replacement
-               r
-             =
-             Some renamed_input_node
-             \<and>
-             edge_to_classify =
-               make_edge
-                 predecessor_node
-                 renamed_input_node
-                 r"
-
-        then show ?thesis
-          by blast
-      qed
-
-    next
-
-      assume current_input_edge:
-        "\<exists>predecessor_node renamed_input_node.
-           predecessor_on_wire
-             original_circuit
-             operation_node_id
-             q
-           =
-           Some predecessor_node
-           \<and>
-           renamed_input_interface
-             original_circuit
-             replacement
-             q
-           =
-           Some renamed_input_node
-           \<and>
-           edge_to_classify =
-             make_edge
-               predecessor_node
-               renamed_input_node
-               q"
-
-      then show ?thesis
-        by blast
-    qed
+      using insert.IH
+      by auto
   qed
 
   have output_step_cases:
     "edge_to_classify \<in> edges (?connect_output q circuit)
-     \<Longrightarrow>
-     edge_to_classify \<in> edges circuit
-       \<or>
-       (\<exists>renamed_output_node successor_node.
-          renamed_output_interface
-            original_circuit
-            replacement
-            q
-          =
-          Some renamed_output_node
-          \<and>
-          successor_on_wire
-            original_circuit
-            operation_node_id
-            q
-          =
-          Some successor_node
-          \<and>
-          edge_to_classify =
-            make_edge
-              renamed_output_node
-              successor_node
-              q)"
+     \<Longrightarrow> edge_to_classify \<in> edges circuit
+       \<or> (\<exists>renamed_output_node successor_node.
+          renamed_output_interface original_circuit replacement q = Some renamed_output_node
+        \<and> successor_on_wire original_circuit operation_node_id q = Some successor_node
+        \<and> edge_to_classify = make_edge renamed_output_node successor_node q)"
     for edge_to_classify circuit q
     unfolding
       connect_subcircuit_output_on_wire_def
@@ -4916,40 +3107,15 @@ proof -
 
   have output_fold_cases:
     "finite interface_qubits
-     \<Longrightarrow>
-     edge_to_classify
-       \<in>
-       edges
-         (Finite_Set.fold
-            ?connect_output
-            circuit
-            interface_qubits)
-     \<Longrightarrow>
-     edge_to_classify \<in> edges circuit
-       \<or>
-       (\<exists>q renamed_output_node successor_node.
+     \<Longrightarrow> edge_to_classify \<in>  edges (Finite_Set.fold ?connect_output circuit interface_qubits)
+     \<Longrightarrow> edge_to_classify \<in> edges circuit
+       \<or> (\<exists>q renamed_output_node successor_node.
           q \<in> interface_qubits
-          \<and>
-          renamed_output_interface
-            original_circuit
-            replacement
-            q
-          =
-          Some renamed_output_node
-          \<and>
-          successor_on_wire
-            original_circuit
-            operation_node_id
-            q
-          =
-          Some successor_node
-          \<and>
-          edge_to_classify =
-            make_edge
-              renamed_output_node
-              successor_node
-              q)"
+          \<and> renamed_output_interface original_circuit replacement q = Some renamed_output_node
+          \<and> successor_on_wire original_circuit operation_node_id q = Some successor_node
+          \<and> edge_to_classify = make_edge renamed_output_node successor_node q)"
     for interface_qubits circuit edge_to_classify
+
   proof (induction interface_qubits arbitrary: circuit rule: finite_induct)
     case empty
 
@@ -4957,142 +3123,33 @@ proof -
       by simp
 
   next
-
     case (insert q interface_qubits)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect_output
-         circuit
-         (insert q interface_qubits)
-       =
-       ?connect_output q
-         (Finite_Set.fold
-            ?connect_output
-            circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect_output circuit (insert q interface_qubits)
+       = ?connect_output q (Finite_Set.fold ?connect_output circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_output.fold_insert)
 
     have edge_after_q:
-      "edge_to_classify
-         \<in>
-         edges
-           (?connect_output q
-             (Finite_Set.fold
-                ?connect_output
-                circuit
-                interface_qubits))"
+      "edge_to_classify \<in> edges (?connect_output q (Finite_Set.fold ?connect_output circuit interface_qubits))"
       using insert.prems
-      unfolding fold_insert .
+      unfolding fold_insert
+      by simp
 
     from output_step_cases[OF edge_after_q]
     show ?case
-    proof
-
-      assume edge_before_q:
-        "edge_to_classify
-           \<in>
-           edges
-             (Finite_Set.fold
-                ?connect_output
-                circuit
-                interface_qubits)"
-
-      from insert.IH[OF edge_before_q]
-      show ?thesis
-      proof
-
-        assume base_edge:
-          "edge_to_classify \<in> edges circuit"
-
-        then show ?thesis
-          by blast
-
-      next
-
-        assume earlier_output_edge:
-          "\<exists>r renamed_output_node successor_node.
-             r \<in> interface_qubits
-             \<and>
-             renamed_output_interface
-               original_circuit
-               replacement
-               r
-             =
-             Some renamed_output_node
-             \<and>
-             successor_on_wire
-               original_circuit
-               operation_node_id
-               r
-             =
-             Some successor_node
-             \<and>
-             edge_to_classify =
-               make_edge
-                 renamed_output_node
-                 successor_node
-                 r"
-
-        then show ?thesis
-          by blast
-      qed
-
-    next
-
-      assume current_output_edge:
-        "\<exists>renamed_output_node successor_node.
-           renamed_output_interface
-             original_circuit
-             replacement
-             q
-           =
-           Some renamed_output_node
-           \<and>
-           successor_on_wire
-             original_circuit
-             operation_node_id
-             q
-           =
-           Some successor_node
-           \<and>
-           edge_to_classify =
-             make_edge
-               renamed_output_node
-               successor_node
-               q"
-
-      then show ?thesis
-        by blast
-    qed
+      using insert.IH
+      by auto
   qed
 
   have after_output_cases:
     "e \<in> edges ?circuit4
-     \<or>
-     (\<exists>q renamed_output_node successor_node.
+     \<or> (\<exists>q renamed_output_node successor_node.
         q \<in> subcircuit_interface_qubits replacement
-        \<and>
-        renamed_output_interface
-          original_circuit
-          replacement
-          q
-        =
-        Some renamed_output_node
-        \<and>
-        successor_on_wire
-          original_circuit
-          operation_node_id
-          q
-        =
-        Some successor_node
-        \<and>
-        e =
-          make_edge
-            renamed_output_node
-            successor_node
-            q)"
+        \<and> renamed_output_interface original_circuit replacement q = Some renamed_output_node
+        \<and> successor_on_wire original_circuit operation_node_id q = Some successor_node
+        \<and> e = make_edge renamed_output_node successor_node q)"
 
     using
       connect_subcircuit_outputs_def
@@ -5111,26 +3168,9 @@ proof -
        \<or>
        (\<exists>q predecessor_node renamed_input_node.
           q \<in> subcircuit_interface_qubits replacement
-          \<and>
-          predecessor_on_wire
-            original_circuit
-            operation_node_id
-            q
-          =
-          Some predecessor_node
-          \<and>
-          renamed_input_interface
-            original_circuit
-            replacement
-            q
-          =
-          Some renamed_input_node
-          \<and>
-          e =
-            make_edge
-              predecessor_node
-              renamed_input_node
-              q)"
+          \<and> predecessor_on_wire original_circuit operation_node_id q = Some predecessor_node
+          \<and> renamed_input_interface original_circuit replacement q = Some renamed_input_node
+          \<and> e = make_edge predecessor_node renamed_input_node q)"
       using
         connect_subcircuit_inputs_def
         edge_before_outputs
@@ -5140,114 +3180,15 @@ proof -
       by presburger
 
     from after_input_cases show ?thesis
-    proof
-
-      assume edge_before_inputs:
-        "e \<in> edges ?circuit3"
-
-      have internal_or_old:
-        "e \<in> edges ?circuit2
-         \<or>
-         e \<in>
-           renamed_subcircuit_internal_edges
-             original_circuit
-             replacement"
-        using edge_before_inputs
-        unfolding insert_subcircuit_internal_edges_def
-        by auto
-
-      from internal_or_old show ?thesis
-      proof
-
-        assume edge_before_internal_insertion:
-          "e \<in> edges ?circuit2"
-
-        have edge_after_removal:
-          "e \<in> edges ?circuit1"
-          using edge_before_internal_insertion
-          unfolding insert_subcircuit_nodes_def
-          by simp
-
-        have original_unrelated:
-          "e \<in> edges original_circuit
-           \<and>
-           edge_source e \<noteq> operation_node_id
-           \<and>
-           edge_target e \<noteq> operation_node_id"
-          using edge_after_removal
-          unfolding remove_operation_node_def
-          by auto
-
-        then show ?thesis
-          by blast
-
-      next
-
-        assume internal_edge:
-          "e \<in>
-            renamed_subcircuit_internal_edges
-              original_circuit
-              replacement"
-
-        then show ?thesis
-          by blast
-      qed
-
-    next
-
-      assume input_edge:
-        "\<exists>q predecessor_node renamed_input_node.
-           q \<in> subcircuit_interface_qubits replacement
-           \<and>
-           predecessor_on_wire
-             original_circuit
-             operation_node_id
-             q
-           =
-           Some predecessor_node
-           \<and>
-           renamed_input_interface
-             original_circuit
-             replacement
-             q
-           =
-           Some renamed_input_node
-           \<and>
-           e =
-             make_edge
-               predecessor_node
-               renamed_input_node
-               q"
-
-      then show ?thesis
-        by simp
-    qed
+      by auto
 
   next
-
     assume output_edge:
       "\<exists>q renamed_output_node successor_node.
          q \<in> subcircuit_interface_qubits replacement
-         \<and>
-         renamed_output_interface
-           original_circuit
-           replacement
-           q
-         =
-         Some renamed_output_node
-         \<and>
-         successor_on_wire
-           original_circuit
-           operation_node_id
-           q
-         =
-         Some successor_node
-         \<and>
-         e =
-           make_edge
-             renamed_output_node
-             successor_node
-             q"
+         \<and> renamed_output_interface original_circuit replacement q = Some renamed_output_node
+         \<and> successor_on_wire original_circuit operation_node_id q = Some successor_node
+         \<and> e = make_edge renamed_output_node successor_node q"
 
     then show ?thesis
       by blast
@@ -5259,28 +3200,14 @@ lemma replace_operation_by_subcircuit_preserves_boundary_nodes:
     "is_valid_construction_state circuit frontier"
 
   assumes valid_replacement:
-    "is_valid_subcircuit_replacement
-       circuit
-       operation_node_id
-       replacement"
+    "is_valid_subcircuit_replacement circuit operation_node_id replacement"
 
   shows
     "are_well_formed_boundary_nodes
-       (fst
-         (replace_operation_by_subcircuit
-            circuit
-            frontier
-            operation_node_id
-            replacement))"
-proof -
+       (fst (replace_operation_by_subcircuit circuit frontier operation_node_id replacement))"
 
-  let ?result =
-    "fst
-       (replace_operation_by_subcircuit
-          circuit
-          frontier
-          operation_node_id
-          replacement)"
+proof -
+  let ?result = "fst (replace_operation_by_subcircuit circuit frontier operation_node_id replacement)"
 
   from valid_state have original_well_formed:
     "is_well_formed_circuit circuit"
@@ -5294,8 +3221,7 @@ proof -
 
   from valid_replacement obtain original_op where
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode original_op)"
+      "nodes circuit operation_node_id = Some (OperationNode original_op)"
     unfolding is_valid_subcircuit_replacement_def
     by blast
 
@@ -5308,67 +3234,33 @@ proof -
     by auto
 
   let ?circuit1 =
-    "remove_operation_node
-       circuit
-       operation_node_id"
+    "remove_operation_node circuit operation_node_id"
 
-  let ?circuit2 =
-    "insert_subcircuit_nodes
-       circuit
-       ?circuit1
-       replacement"
+  let ?circuit2 = "insert_subcircuit_nodes circuit ?circuit1 replacement"
 
-  let ?circuit3 =
-    "insert_subcircuit_internal_edges
-       circuit
-       ?circuit2
-       replacement"
+  let ?circuit3 = "insert_subcircuit_internal_edges circuit ?circuit2 replacement"
 
-  let ?connect_input =
-    "connect_subcircuit_input_on_wire
-       circuit
-       operation_node_id
-       replacement"
+  let ?connect_input = "connect_subcircuit_input_on_wire circuit operation_node_id replacement"
 
-  let ?connect_output =
-    "connect_subcircuit_output_on_wire
-       circuit
-       operation_node_id
-       replacement"
+  let ?connect_output = "connect_subcircuit_output_on_wire circuit operation_node_id replacement"
 
   have input_fold_preserves_num_qubits:
     "finite interface_qubits
-     \<Longrightarrow>
-     num_qubits
-       (Finite_Set.fold
-          ?connect_input
-          base_circuit
-          interface_qubits)
-     =
-     num_qubits base_circuit"
+     \<Longrightarrow> num_qubits (Finite_Set.fold ?connect_input base_circuit interface_qubits) = num_qubits base_circuit"
     for interface_qubits base_circuit
-  proof (induction interface_qubits arbitrary: base_circuit rule: finite_induct)
 
+  proof (induction interface_qubits arbitrary: base_circuit rule: finite_induct)
     case empty
 
     then show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect_input
-         base_circuit
-         (insert q interface_qubits)
-       =
-       ?connect_input q
-         (Finite_Set.fold
-            ?connect_input
-            base_circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect_input base_circuit (insert q interface_qubits)
+       = ?connect_input q (Finite_Set.fold ?connect_input base_circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_input.fold_insert)
 
@@ -5380,37 +3272,21 @@ proof -
 
   have output_fold_preserves_num_qubits:
     "finite interface_qubits
-     \<Longrightarrow>
-     num_qubits
-       (Finite_Set.fold
-          ?connect_output
-          base_circuit
-          interface_qubits)
-     =
-     num_qubits base_circuit"
+     \<Longrightarrow> num_qubits (Finite_Set.fold ?connect_output base_circuit interface_qubits) = num_qubits base_circuit"
     for interface_qubits base_circuit
-  proof (induction interface_qubits arbitrary: base_circuit rule: finite_induct)
 
+  proof (induction interface_qubits arbitrary: base_circuit rule: finite_induct)
     case empty
 
     then show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect_output
-         base_circuit
-         (insert q interface_qubits)
-       =
-       ?connect_output q
-         (Finite_Set.fold
-            ?connect_output
-            base_circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect_output base_circuit (insert q interface_qubits)
+       = ?connect_output q (Finite_Set.fold ?connect_output base_circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_output.fold_insert)
 
@@ -5421,36 +3297,18 @@ proof -
   qed
 
   have inputs_preserve_num_qubits:
-    "num_qubits
-       (connect_subcircuit_inputs
-          circuit
-          ?circuit3
-          operation_node_id
-          replacement)
-     =
-     num_qubits ?circuit3"
+    "num_qubits (connect_subcircuit_inputs circuit ?circuit3 operation_node_id replacement)
+     = num_qubits ?circuit3"
     unfolding connect_subcircuit_inputs_def
     using
       finite_interfaces
       input_fold_preserves_num_qubits
     by blast
 
-  let ?circuit4 =
-    "connect_subcircuit_inputs
-       circuit
-       ?circuit3
-       operation_node_id
-       replacement"
+  let ?circuit4 = "connect_subcircuit_inputs circuit ?circuit3 operation_node_id replacement"
 
   have outputs_preserve_num_qubits:
-    "num_qubits
-       (connect_subcircuit_outputs
-          circuit
-          ?circuit4
-          operation_node_id
-          replacement)
-     =
-     num_qubits ?circuit4"
+    "num_qubits (connect_subcircuit_outputs circuit ?circuit4 operation_node_id replacement) = num_qubits ?circuit4"
     unfolding connect_subcircuit_outputs_def
     using
       finite_interfaces
@@ -5486,28 +3344,14 @@ lemma replace_operation_by_subcircuit_preserves_well_formed_operation_nodes:
     "is_valid_construction_state circuit frontier"
 
   assumes valid_replacement:
-    "is_valid_subcircuit_replacement
-       circuit
-       operation_node_id
-       replacement"
+    "is_valid_subcircuit_replacement circuit operation_node_id replacement"
 
   shows
-    "are_well_formed_operation_nodes
-       (fst
-         (replace_operation_by_subcircuit
-            circuit
-            frontier
-            operation_node_id
-            replacement))"
-proof -
+    "are_well_formed_operation_nodes 
+       (fst (replace_operation_by_subcircuit circuit frontier operation_node_id replacement))"
 
-  let ?result =
-    "fst
-       (replace_operation_by_subcircuit
-          circuit
-          frontier
-          operation_node_id
-          replacement)"
+proof -
+  let ?result = "fst (replace_operation_by_subcircuit circuit frontier operation_node_id replacement)"
 
   from valid_state have original_well_formed:
     "is_well_formed_circuit circuit"
@@ -5521,17 +3365,13 @@ proof -
 
   from valid_replacement obtain original_op where
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode original_op)"
+      "nodes circuit operation_node_id = Some (OperationNode original_op)"
   and replacement_valid:
       "is_valid_subcircuit replacement"
   and same_num_qubits:
-      "num_qubits (subgraph replacement) =
-         num_qubits circuit"
+      "num_qubits (subgraph replacement) = num_qubits circuit"
   and compatible:
-      "is_compatible_subcircuit
-         (op_qargs original_op)
-         replacement"
+      "is_compatible_subcircuit (op_qargs original_op) replacement"
     unfolding is_valid_subcircuit_replacement_def
     by blast
 
@@ -5554,46 +3394,25 @@ proof -
     using compatible
     by (rule compatible_subcircuit_interface_qubits_finite)
 
-  let ?connect_input =
-    "connect_subcircuit_input_on_wire
-       circuit
-       operation_node_id
-       replacement"
+  let ?connect_input = "connect_subcircuit_input_on_wire circuit operation_node_id replacement"
 
   have input_fold_preserves_num_qubits:
     "finite interface_qubits
-     \<Longrightarrow>
-     num_qubits
-       (Finite_Set.fold
-          ?connect_input
-          current_circuit
-          interface_qubits)
-     =
-     num_qubits current_circuit"
+     \<Longrightarrow> num_qubits (Finite_Set.fold ?connect_input current_circuit interface_qubits) = num_qubits current_circuit"
     for interface_qubits current_circuit
-  proof (induction interface_qubits arbitrary: current_circuit
-           rule: finite_induct)
 
+  proof (induction interface_qubits arbitrary: current_circuit rule: finite_induct)
     case empty
 
     show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect_input
-         current_circuit
-         (insert q interface_qubits)
-       =
-       ?connect_input q
-         (Finite_Set.fold
-            ?connect_input
-            current_circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect_input current_circuit (insert q interface_qubits)
+       = ?connect_input q (Finite_Set.fold ?connect_input current_circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_input.fold_insert)
 
@@ -5603,46 +3422,25 @@ proof -
       by simp
   qed
 
-  let ?connect_output =
-    "connect_subcircuit_output_on_wire
-       circuit
-       operation_node_id
-       replacement"
+  let ?connect_output = "connect_subcircuit_output_on_wire circuit operation_node_id replacement"
 
   have output_fold_preserves_num_qubits:
-    "finite interface_qubits
-     \<Longrightarrow>
-     num_qubits
-       (Finite_Set.fold
-          ?connect_output
-          current_circuit
-          interface_qubits)
-     =
-     num_qubits current_circuit"
+    "finite interface_qubits \<Longrightarrow> num_qubits (Finite_Set.fold ?connect_output current_circuit interface_qubits)
+     = num_qubits current_circuit"
     for interface_qubits current_circuit
-  proof (induction interface_qubits arbitrary: current_circuit
-           rule: finite_induct)
 
+  proof (induction interface_qubits arbitrary: current_circuit rule: finite_induct)
     case empty
 
     show ?case
       by simp
 
   next
-
     case (insert q interface_qubits)
 
     have fold_insert:
-      "Finite_Set.fold
-         ?connect_output
-         current_circuit
-         (insert q interface_qubits)
-       =
-       ?connect_output q
-         (Finite_Set.fold
-            ?connect_output
-            current_circuit
-            interface_qubits)"
+      "Finite_Set.fold ?connect_output current_circuit (insert q interface_qubits)
+       = ?connect_output q (Finite_Set.fold ?connect_output current_circuit interface_qubits)"
       using insert.hyps
       by (rule connect_subcircuit_output.fold_insert)
 
@@ -5654,113 +3452,28 @@ proof -
 
   have result_num_qubits:
     "num_qubits ?result = num_qubits circuit"
-  proof -
-
-    let ?circuit1 =
-      "remove_operation_node
-         circuit
-         operation_node_id"
-
-    let ?circuit2 =
-      "insert_subcircuit_nodes
-         circuit
-         ?circuit1
-         replacement"
-
-    let ?circuit3 =
-      "insert_subcircuit_internal_edges
-         circuit
-         ?circuit2
-         replacement"
-
-    let ?circuit4 =
-      "connect_subcircuit_inputs
-         circuit
-         ?circuit3
-         operation_node_id
-         replacement"
-
-    let ?circuit5 =
-      "connect_subcircuit_outputs
-         circuit
-         ?circuit4
-         operation_node_id
-         replacement"
-
-    have inputs_preserve_num_qubits:
-      "num_qubits ?circuit4 =
-         num_qubits ?circuit3"
-      unfolding connect_subcircuit_inputs_def
-      using
+    using
+        connect_subcircuit_inputs_def
+        connect_subcircuit_outputs_def
         finite_interfaces
         input_fold_preserves_num_qubits
-      by blast
-
-    have outputs_preserve_num_qubits:
-      "num_qubits ?circuit5 =
-         num_qubits ?circuit4"
-      unfolding connect_subcircuit_outputs_def
-      using
-        finite_interfaces
         output_fold_preserves_num_qubits
-      by blast
-
-    show ?thesis
-      unfolding
         replace_operation_by_subcircuit_def
-        Let_def
-      using
-        inputs_preserve_num_qubits
-        outputs_preserve_num_qubits
-      by simp
-  qed
+    by simp
 
   show ?thesis
     unfolding are_well_formed_operation_nodes_def
-  proof (intro allI impI)
-
-    fix node_id op
-
-    assume result_operation_node:
-      "nodes ?result node_id =
-         Some (OperationNode op)"
-
-    from replace_operation_by_subcircuit_node_cases[
-        OF
-          valid_state
-          valid_replacement
-          result_operation_node]
-    consider
-      (original)
-        "node_id \<noteq> operation_node_id"
-        "nodes circuit node_id =
-           Some (OperationNode op)"
-    |
-      (copied) local_node_id where
-        "local_node_id
-           \<in> subcircuit_operation_node_ids replacement"
-        "node_id =
-           rename_subcircuit_node_id
-             circuit
-             local_node_id"
-        "nodes
-           (subgraph replacement)
-           local_node_id
-         =
-         Some (OperationNode op)"
-      by blast
-
-    then show
-      "operation_in_circuit ?result op"
-      by (metis
-          are_well_formed_operation_nodes_def
-          operation_in_circuit_def
-          original_operation_nodes
-          qubit_in_circuit_def
-          replacement_operation_nodes
-          result_num_qubits
-          same_num_qubits)
-  qed
+    by (metis
+        are_well_formed_operation_nodes_def
+        operation_in_circuit_def
+        original_operation_nodes
+        qubit_in_circuit_def
+        replace_operation_by_subcircuit_node_cases
+        replacement_operation_nodes
+        result_num_qubits
+        same_num_qubits
+        valid_replacement
+        valid_state)
 qed
 
 lemma valid_subcircuit_input_interface_uses_qubit:
@@ -5771,39 +3484,25 @@ lemma valid_subcircuit_input_interface_uses_qubit:
     "input_interface replacement q = Some node_id"
 
   assumes operation_node:
-    "nodes
-       (subgraph replacement)
-       node_id
-     =
-     Some (OperationNode op)"
+    "nodes (subgraph replacement) node_id = Some (OperationNode op)"
 
   shows
     "q \<in> set (op_qargs op)"
-proof -
 
+proof -
   from valid_subcircuit input_interface
   have first_operation:
-    "is_first_operation_on_subcircuit_wire
-       replacement
-       q
-       node_id"
+    "is_first_operation_on_subcircuit_wire replacement q node_id"
     unfolding is_valid_subcircuit_def
     by blast
 
   from first_operation have input_edge:
-    "(get_input_node_id q, node_id)
-       \<in> wire_edge_relation
-            (subgraph replacement)
-            q"
+    "(get_input_node_id q, node_id) \<in> wire_edge_relation (subgraph replacement) q"
     unfolding is_first_operation_on_subcircuit_wire_def
     by blast
 
   then have edge_in_subgraph:
-    "make_edge
-       (get_input_node_id q)
-       node_id
-       q
-     \<in> edges (subgraph replacement)"
+    "make_edge (get_input_node_id q) node_id q \<in> edges (subgraph replacement)"
     unfolding wire_edge_relation_def
     by simp
 
@@ -5824,12 +3523,7 @@ proof -
 
   from well_formed_edges edge_in_subgraph
   have well_formed_input_edge:
-    "is_well_formed_edge
-       (subgraph replacement)
-       (make_edge
-          (get_input_node_id q)
-          node_id
-          q)"
+    "is_well_formed_edge (subgraph replacement) (make_edge (get_input_node_id q) node_id q)"
     unfolding are_well_formed_edges_def
     by blast
 
@@ -5967,8 +3661,7 @@ proof -
 
   let ?connect_input = "connect_subcircuit_input_on_wire circuit operation_node_id replacement"
 
-  let ?connect_output =
-    "connect_subcircuit_output_on_wire circuit operation_node_id replacement"
+  let ?connect_output = "connect_subcircuit_output_on_wire circuit operation_node_id replacement"
 
   have input_fold_preserves_num_qubits:
     "finite interface_qubits \<Longrightarrow>
@@ -5977,8 +3670,7 @@ proof -
 
     for interface_qubits current_circuit
 
-  proof (induction interface_qubits arbitrary: current_circuit
-           rule: finite_induct)
+  proof (induction interface_qubits arbitrary: current_circuit rule: finite_induct)
     case empty
 
     show ?case
@@ -6086,7 +3778,7 @@ proof -
     by auto
 
   have renamed_internal_edge_well_formed:
-    "renamed_edge \<in>renamed_subcircuit_internal_edges circuit replacement
+    "renamed_edge \<in> (renamed_subcircuit_internal_edges circuit replacement)
        \<Longrightarrow> is_well_formed_edge ?result renamed_edge"
     for renamed_edge
   proof -
@@ -6226,7 +3918,8 @@ proof -
 
     from predecessor_on_wire_correct[OF predecessor]
     have predecessor_edge:
-      "make_edge predecessor_node operation_node_id q \<in> edges circuit" .
+      "make_edge predecessor_node operation_node_id q \<in> edges circuit"
+      by simp
 
     from original_edges_well_formed predecessor_edge
     have predecessor_edge_well_formed:
@@ -6249,38 +3942,11 @@ proof -
 
     have predecessor_not_removed:
       "predecessor_node \<noteq> operation_node_id"
-    proof
-      assume equality:
-        "predecessor_node = operation_node_id"
-
-      have self_edge:
-        "make_edge operation_node_id operation_node_id q \<in> edges circuit"
-        using predecessor_edge equality
-        by simp
-
-      have self_relation:
-        "(operation_node_id, operation_node_id) \<in> edge_relation circuit"
-        using self_edge
-        unfolding
-          edge_relation_def
-          make_edge_def
-        by force
-
-      have self_reachable:
-        "(operation_node_id, operation_node_id) \<in> (edge_relation circuit)\<^sup>+"
-        using self_relation
-        by (rule trancl.r_into_trancl)
-
-      from acyclic_circuit have
-        "(operation_node_id, operation_node_id) \<notin> (edge_relation circuit)\<^sup>+"
-        unfolding
-          is_acyclic_circuit_def
-          acyclic_def
-        by blast
-
-      with self_reachable show False
-        by contradiction
-    qed
+      using
+        acyclic_circuit
+        predecessor
+        predecessor_on_wire_not_self
+      by simp
 
     have result_predecessor:
       "nodes ?result predecessor_node = Some predecessor_node_value"
@@ -6374,7 +4040,8 @@ proof -
 
     from successor_on_wire_correct[OF successor]
     have successor_edge:
-      "make_edge operation_node_id successor_node q \<in> edges circuit" .
+      "make_edge operation_node_id successor_node q \<in> edges circuit"
+      by simp
 
     from original_edges_well_formed successor_edge
     have successor_edge_well_formed:
@@ -6398,46 +4065,11 @@ proof -
 
     have successor_not_removed:
       "successor_node \<noteq> operation_node_id"
-    proof
-
-      assume equality:
-        "successor_node = operation_node_id"
-
-      have self_edge:
-        "make_edge
-           operation_node_id
-           operation_node_id
-           q
-         \<in> edges circuit"
-      using successor_edge equality
-      by simp
-
-      have self_relation:
-        "(operation_node_id, operation_node_id)
-           \<in> edge_relation circuit"
-        using self_edge
-        unfolding
-          edge_relation_def
-          make_edge_def
-        by force
-
-      have self_reachable:
-        "(operation_node_id, operation_node_id)
-           \<in> (edge_relation circuit)\<^sup>+"
-        using self_relation
-        by (rule trancl.r_into_trancl)
-
-      from acyclic_circuit have
-        "(operation_node_id, operation_node_id)
-           \<notin> (edge_relation circuit)\<^sup>+"
-        unfolding
-          is_acyclic_circuit_def
-          acyclic_def
-        by blast
-
-      with self_reachable show False
-        by contradiction
-    qed
+      using
+        acyclic_circuit
+        successor
+        successor_on_wire_not_self
+      by auto
 
     have result_successor:
       "nodes ?result successor_node = Some successor_node_value"
@@ -6561,41 +4193,14 @@ lemma replace_operation_by_subcircuit_preserves_well_formed_circuit:
 
   shows
     "is_well_formed_circuit (fst (replace_operation_by_subcircuit circuit frontier operation_node_id replacement))"
-proof -
-  let ?result = "fst (replace_operation_by_subcircuit circuit frontier operation_node_id replacement)"
-
-  have well_formed_boundary_nodes:
-    "are_well_formed_boundary_nodes ?result"
-    using
-      replace_operation_by_subcircuit_preserves_boundary_nodes
-      valid_state valid_replacement
-    by simp
-
-  have well_formed_edges:
-    "are_well_formed_edges ?result"
-    using
-      replace_operation_by_subcircuit_preserves_well_formed_edges
-      valid_state
+  using
       acyclic_circuit
-      valid_replacement
-    by simp
-
-  have well_formed_operation_nodes:
-    "are_well_formed_operation_nodes ?result"
-    using
+      is_well_formed_circuit_def
+      replace_operation_by_subcircuit_preserves_boundary_nodes
+      replace_operation_by_subcircuit_preserves_well_formed_edges
       replace_operation_by_subcircuit_preserves_well_formed_operation_nodes
-      valid_replacement
-      valid_state
-    by simp
-
-  show ?thesis
-    unfolding is_well_formed_circuit_def
-    using
-      well_formed_boundary_nodes
-      well_formed_edges
-      well_formed_operation_nodes
-    by simp
-qed
+      valid_replacement valid_state
+  by simp
 
 lemma valid_subcircuit_replacement_is_acyclic:
   (* A valid subcircuit replacement contains a valid replacement subgraph.
@@ -6643,20 +4248,17 @@ lemma injective_renaming_trancl_reflects_cycle:
     "\<exists>local_node. (local_node, local_node) \<in> relation\<^sup>+"
 
 proof -
-  let ?renamed_relation = "{(rename source, rename target) | 
-         source target. (source, target) \<in> relation}"
+  let ?renamed_relation = "{(rename source, rename target) | source target. (source, target) \<in> relation}"
 
   have reflect_renamed_path:
-    "(renamed_source, renamed_target)
-       \<in> ?renamed_relation\<^sup>+
-     \<Longrightarrow>
-     \<exists>local_source local_target.
-       renamed_source = rename local_source
+    "(renamed_source, renamed_target) \<in> ?renamed_relation\<^sup>+
+     \<Longrightarrow> \<exists>local_source local_target.
+         renamed_source = rename local_source
        \<and> renamed_target = rename local_target
        \<and> (local_source, local_target) \<in> relation\<^sup>+"
     for renamed_source renamed_target
-  proof (induction rule: trancl_induct)
 
+  proof (induction rule: trancl_induct)
     case (base y)
 
     from base.hyps obtain local_source local_target where
@@ -6681,7 +4283,6 @@ proof -
       by blast
 
   next
-
     case (step y z)
 
     from step.IH obtain local_source local_intermediate where
@@ -6769,8 +4370,7 @@ lemma renamed_internal_cycle_implies_subcircuit_cycle:
      consistently. *)
   assumes internal_cycle:
     "(renamed_node, renamed_node)
-       \<in> {(edge_source e, edge_target e) |
-          e. e \<in> renamed_subcircuit_internal_edges circuit replacement}\<^sup>+"
+       \<in> {(edge_source e, edge_target e) | e. e \<in> renamed_subcircuit_internal_edges circuit replacement}\<^sup>+"
 
   shows
     "\<exists>local_node. (local_node, local_node) \<in> (edge_relation (subgraph replacement))\<^sup>+"
@@ -6779,8 +4379,7 @@ proof -
   let ?rename = "rename_subcircuit_node_id circuit"
 
   let ?internal_relation =
-    "{(edge_source e, edge_target e) |
-       e.  e \<in> subcircuit_internal_edges replacement}"
+    "{(edge_source e, edge_target e) | e.  e \<in> subcircuit_internal_edges replacement}"
 
   have rename_injective:
     "inj ?rename"
@@ -6791,21 +4390,16 @@ proof -
   have renamed_relation_eq:
     "{(edge_source e, edge_target e) | e. e \<in> renamed_subcircuit_internal_edges circuit replacement}
      = {(?rename source, ?rename target) | source target. (source, target) \<in> ?internal_relation}"
+
   proof (rule set_eqI)
     fix renamed_pair
 
     show
-      "renamed_pair
-         \<in> {(edge_source e, edge_target e) | e. e \<in> renamed_subcircuit_internal_edges circuit replacement}
-       \<longleftrightarrow>
-       renamed_pair 
-         \<in> {(?rename source, ?rename target) | source target. (source, target) \<in> ?internal_relation}"
+      "renamed_pair \<in> {(edge_source e, edge_target e) | e. e \<in> renamed_subcircuit_internal_edges circuit replacement}
+       \<longleftrightarrow> renamed_pair \<in> {(?rename source, ?rename target) | source target. (source, target) \<in> ?internal_relation}"
     proof
       assume renamed_pair_in:
-        "renamed_pair
-           \<in>
-           {(edge_source e, edge_target e) |
-              e. e \<in> renamed_subcircuit_internal_edges circuit replacement}"
+        "renamed_pair \<in> {(edge_source e, edge_target e) | e. e \<in> renamed_subcircuit_internal_edges circuit replacement}"
 
       then obtain renamed_edge where
         renamed_edge:
@@ -6828,9 +4422,7 @@ proof -
         by auto
 
       show
-        "renamed_pair
-           \<in> {(?rename source, ?rename target) |
-              source target. (source, target) \<in> ?internal_relation}"
+        "renamed_pair \<in> {(?rename source, ?rename target) | source target. (source, target) \<in> ?internal_relation}"
         using
           renamed_pair_eq
           renamed_edge_eq
@@ -6842,9 +4434,7 @@ proof -
 
     next
       assume renamed_pair_in:
-        "renamed_pair
-           \<in> {(?rename source, ?rename target) |
-              source target. (source, target) \<in> ?internal_relation}"
+        "renamed_pair \<in> {(?rename source, ?rename target) | source target. (source, target) \<in> ?internal_relation}"
 
       then obtain source target where
         local_pair:
@@ -6869,9 +4459,7 @@ proof -
         by simp
 
       show
-        "renamed_pair 
-           \<in> {(edge_source e, edge_target e) |
-              e. e \<in> renamed_subcircuit_internal_edges circuit replacement}"
+        "renamed_pair \<in> {(edge_source e, edge_target e) | e. e \<in> renamed_subcircuit_internal_edges circuit replacement}"
         using
           renamed_edge
           renamed_pair_eq
@@ -6885,13 +4473,14 @@ proof -
   qed
 
   from internal_cycle have renamed_internal_relation_cycle:
-    "(renamed_node, renamed_node) \<in> {(?rename source, ?rename target) |
+    "(renamed_node, renamed_node) \<in> {(?rename source, ?rename target) | 
           source target. (source, target) \<in> ?internal_relation}\<^sup>+"
     unfolding renamed_relation_eq
     by simp
 
-  from injective_renaming_trancl_reflects_cycle[
-      OF rename_injective renamed_internal_relation_cycle]
+  from injective_renaming_trancl_reflects_cycle[OF
+      rename_injective
+      renamed_internal_relation_cycle]
   obtain local_node where
     local_internal_cycle:
       "(local_node, local_node) \<in> ?internal_relation\<^sup>+"
@@ -6978,8 +4567,7 @@ lemma replacement_cycle_internal_or_original:
   shows
     "(\<exists>original_node. (original_node, original_node) \<in> (edge_relation circuit)\<^sup>+)
    \<or> (\<exists>renamed_node. (renamed_node, renamed_node) \<in>
-         {(edge_source e, edge_target e) |
-             e. e \<in> renamed_subcircuit_internal_edges circuit replacement}\<^sup>+)"
+         {(edge_source e, edge_target e) | e. e \<in> renamed_subcircuit_internal_edges circuit replacement}\<^sup>+)"
 
   using
     valid_replacement
@@ -7059,11 +4647,11 @@ proof -
       unfolding edge_relation_def
       by blast
 
-    from replace_operation_by_subcircuit_edge_cases[
-        OF valid_replacement edge_in_result]
+    from replace_operation_by_subcircuit_edge_cases[OF
+        valid_replacement
+        edge_in_result]
     show ?thesis
     proof
-
       assume original_case:
         "e \<in> edges circuit
          \<and> edge_source e \<noteq> operation_node_id
@@ -7257,7 +4845,6 @@ proof -
             by auto
 
         next
-
           assume output_case:
             "\<exists>q renamed_output_node successor_node.
                q \<in> subcircuit_interface_qubits replacement
@@ -7276,7 +4863,8 @@ proof -
 
           from successor_on_wire_correct[OF successor]
           have successor_edge:
-            "make_edge operation_node_id successor_node q \<in> edges circuit" .
+            "make_edge operation_node_id successor_node q \<in> edges circuit"
+            by simp
 
           from original_edges_well_formed successor_edge
           have successor_edge_well_formed:
@@ -7360,8 +4948,7 @@ proof -
 
   have path_cases:
     "(u, v) \<in> (edge_relation ?result)\<^sup>+ \<Longrightarrow>
-         (u, v) \<in> ?internal_relation\<^sup>+
-       \<or> (?collapse u, ?collapse v) \<in> (edge_relation circuit)\<^sup>+"
+         (u, v) \<in> ?internal_relation\<^sup>+ \<or> (?collapse u, ?collapse v) \<in> (edge_relation circuit)\<^sup>+"
     for u v
   proof (induction rule: trancl_induct)
     case (base v)
@@ -7438,8 +5025,7 @@ proof -
           by simp_all
 
         have
-          "(?collapse u, ?collapse w)
-             \<in> (edge_relation circuit)\<^sup>+"
+          "(?collapse u, ?collapse w) \<in> (edge_relation circuit)\<^sup>+"
           using final_original collapse_uv
           by auto 
 
@@ -7472,8 +5058,7 @@ proof -
           by simp
 
         have
-          "(?collapse u, ?collapse w)
-             \<in> (edge_relation circuit)\<^sup>+"
+          "(?collapse u, ?collapse w) \<in> (edge_relation circuit)\<^sup>+"
           using prefix_original collapse_vw
           by simp
 
@@ -7482,12 +5067,10 @@ proof -
 
       next
         assume final_original:
-          "(?collapse v, ?collapse w)
-             \<in> edge_relation circuit"
+          "(?collapse v, ?collapse w) \<in> edge_relation circuit"
 
         have
-          "(?collapse u, ?collapse w)
-             \<in> (edge_relation circuit)\<^sup>+"
+          "(?collapse u, ?collapse w)\<in> (edge_relation circuit)\<^sup>+"
           using prefix_original final_original
           by (rule trancl_into_trancl)
 
@@ -7553,8 +5136,7 @@ lemma replacement_cycle_cases:
 
   shows
     "(\<exists>original_node. (original_node, original_node) \<in> (edge_relation circuit)\<^sup>+)
-     \<or>
-     (\<exists>replacement_node. (replacement_node, replacement_node) \<in> (edge_relation (subgraph replacement))\<^sup>+)"
+     \<or> (\<exists>replacement_node. (replacement_node, replacement_node) \<in> (edge_relation (subgraph replacement))\<^sup>+)"
   by (meson
       renamed_internal_cycle_implies_subcircuit_cycle
       replacement_cycle_internal_or_original
