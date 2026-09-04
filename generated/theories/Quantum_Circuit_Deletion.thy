@@ -14,18 +14,15 @@ where
   *)
   "reconnect_wire original_circuit node_id q current_circuit =
      (case
-        (predecessor_on_wire original_circuit node_id q,
-         successor_on_wire original_circuit node_id q)
+        (predecessor_on_wire original_circuit node_id q, successor_on_wire original_circuit node_id q)
       of
         (Some predecessor, Some successor) \<Rightarrow>
           insert_edge
-            (make_edge predecessor successor q)
+            (make_edge predecessor successor q) 
             (delete_edge
-              (make_edge node_id successor q)
-              (delete_edge
-                (make_edge predecessor node_id q)
-                current_circuit))
+              (make_edge node_id successor q) (delete_edge (make_edge predecessor node_id q) current_circuit))
       | _ \<Rightarrow> current_circuit)"
+
 definition delete_operation ::
   "quantum_circuit \<Rightarrow> node_id \<Rightarrow> quantum_circuit"
 where
@@ -54,200 +51,111 @@ where
      unchanged. If either adjacent node cannot be found on some affected
      wire, that wire is also left unchanged.
   *)
-  "delete_operation circuit node_id =
-     (case nodes circuit node_id of
-        Some (OperationNode op) \<Rightarrow>
-          (let
-             reconnected_circuit =
-               fold
-                 (reconnect_wire circuit node_id)
-                 (op_qargs op)
-                 circuit
-           in
-             reconnected_circuit
-               \<lparr>nodes :=
-                  (nodes reconnected_circuit)
-                    (node_id := None)\<rparr>)
-      | _ \<Rightarrow> circuit)"
+  "delete_operation circuit node_id = (case nodes circuit node_id of Some (OperationNode op) \<Rightarrow> (let reconnected_circuit = fold (reconnect_wire circuit node_id) (op_qargs op) circuit in reconnected_circuit \<lparr>nodes := (nodes reconnected_circuit) (node_id := None)\<rparr>) | _ \<Rightarrow> circuit)"
 lemma reconnect_wire_preserves_nodes[simp]:
   (* Reconnecting one wire changes only the edge set. It does not change
      the node table. *)
-  "nodes
-     (reconnect_wire original_circuit operation_node_id q circuit)
-     node_id
-   =
-   nodes circuit node_id"
+  "nodes (reconnect_wire original_circuit operation_node_id q circuit) node_id = nodes circuit node_id"
 
   unfolding reconnect_wire_def
   apply (auto split: option.splits)
   by (simp add: delete_edge_def insert_edge_def)
 lemma fold_reconnect_wire_preserves_nodes[simp]:
   (* Reconnecting any list of wires preserves the complete node table. *)
-  "nodes
-     (fold
-        (reconnect_wire original_circuit operation_node_id)
-        qs
-        circuit)
-     node_id
-   =
-   nodes circuit node_id"
+  "nodes (fold (reconnect_wire original_circuit operation_node_id) qs circuit) node_id = nodes circuit node_id"
 
 proof (induction qs arbitrary: circuit)
-
   case Nil
 
   show ?case
     by simp
 
 next
-
   case (Cons q qs)
 
   show ?case
     using Cons.IH
     by simp
-
 qed
+
 lemma delete_operation_nodes:
   (* When operation_node_id stores an OperationNode, deletion preserves
      every node-table entry except operation_node_id, which is mapped to
      None. *)
   assumes
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   shows
-    "nodes
-       (delete_operation circuit operation_node_id)
-     =
-     (nodes circuit)(operation_node_id := None)"
+    "nodes (delete_operation circuit operation_node_id) = (nodes circuit)(operation_node_id := None)"
 
 proof -
-
   have reconnected_nodes:
-    "nodes
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          (op_qargs op)
-          circuit)
-     =
-     nodes circuit"
-
-  proof (rule ext)
-
-    fix node_id
-
-    show
-      "nodes
-         (fold
-            (reconnect_wire circuit operation_node_id)
-            (op_qargs op)
-            circuit)
-         node_id
-       =
-       nodes circuit node_id"
-      by simp
-
-  qed
+    "nodes (fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit) = nodes circuit"
+    by auto
 
   show ?thesis
     unfolding delete_operation_def
-    using operation_exists reconnected_nodes
+    using
+      operation_exists
+      reconnected_nodes
     by simp
-
 qed
+
 lemma delete_operation_other_node[simp]:
   (* Deleting one operation does not change any other node-table entry. *)
   assumes
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     different_node:
       "other_node_id \<noteq> operation_node_id"
   shows
-    "nodes
-       (delete_operation circuit operation_node_id)
-       other_node_id
-     =
-     nodes circuit other_node_id"
+    "nodes (delete_operation circuit operation_node_id) other_node_id = nodes circuit other_node_id"
 
   using
     delete_operation_nodes[OF operation_exists]
     different_node
   by simp
+
 lemma reconnect_wire_edges_characterisation:
   (* Reconnecting a wire removes the two edges incident on the deleted
      operation node and inserts the corresponding bypass edge. *)
   assumes
     predecessor:
-      "predecessor_on_wire original_circuit operation_node_id q =
-         Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire original_circuit operation_node_id q =
-         Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   shows
-    "edges
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-     =
-     insert
-       (make_edge predecessor_id successor_id q)
-       (edges current_circuit
-          - { make_edge predecessor_id operation_node_id q,
-              make_edge operation_node_id successor_id q })"
+    "edges (reconnect_wire original_circuit operation_node_id q current_circuit)
+     = insert (make_edge predecessor_id successor_id q)
+         (edges current_circuit - { make_edge predecessor_id operation_node_id q, make_edge operation_node_id successor_id q })"
 
   unfolding
     reconnect_wire_def
     insert_edge_def
     delete_edge_def
     make_edge_def
-  using predecessor successor
+  using
+    predecessor
+    successor
   by auto
+
 lemma reconnect_wire_successor_predecessor_characterisation:
   assumes
     predecessor:
-      "predecessor_on_wire original_circuit operation_node_id q =
-         Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire original_circuit operation_node_id q =
-         Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   shows
-    "wire_edge_relation
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-     =
-     insert
-       (predecessor_id, successor_id)
-       (wire_edge_relation current_circuit q
-          - {(predecessor_id, operation_node_id),
-             (operation_node_id, successor_id)})"
+    "wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) q
+     = insert (predecessor_id, successor_id) (wire_edge_relation current_circuit q - {(predecessor_id, operation_node_id), (operation_node_id, successor_id)})"
 
 proof -
-
   have
-    "edges
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-     =
-     insert
-       (make_edge predecessor_id successor_id q)
-       (edges current_circuit
-          -
-          { make_edge predecessor_id operation_node_id q,
-            make_edge operation_node_id successor_id q })"
+    "edges (reconnect_wire original_circuit operation_node_id q current_circuit)
+     = insert (make_edge predecessor_id successor_id q) (edges current_circuit - { make_edge predecessor_id operation_node_id q, make_edge operation_node_id successor_id q })"
     using assms
     by (rule reconnect_wire_edges_characterisation)
 
@@ -256,6 +164,7 @@ proof -
     by auto
 
 qed
+
 lemma reconnect_wire_preserves_input_boundary:
   (* Reconnecting predecessor -> operation_node_id -> successor into
      predecessor -> successor preserves the input boundary of wire q.
@@ -268,53 +177,30 @@ lemma reconnect_wire_preserves_input_boundary:
   *)
   assumes
     no_input_predecessor:
-      "\<nexists>predecessor_id.
-         (predecessor_id, get_input_node_id q)
-           \<in> wire_edge_relation circuit q"
+      "\<nexists>predecessor_id. (predecessor_id, get_input_node_id q) \<in> wire_edge_relation circuit q"
   and
     unique_input_successor:
-      "has_unique_wire_successor
-         circuit q (get_input_node_id q)"
+      "has_unique_wire_successor circuit q (get_input_node_id q)"
   and
     predecessor:
-      "predecessor_on_wire circuit operation_node_id q =
-         Some predecessor_id"
+      "predecessor_on_wire circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire circuit operation_node_id q =
-         Some successor_id"
+      "successor_on_wire circuit operation_node_id q = Some successor_id"
   shows
     "(\<nexists>predecessor_id.
-         (predecessor_id, get_input_node_id q)
-           \<in> wire_edge_relation
-                (reconnect_wire
-                   circuit
-                   operation_node_id
-                   q
-                   circuit)
-                q)
-     \<and>
-     has_unique_wire_successor
-       (reconnect_wire
-          circuit
-          operation_node_id
-          q
-          circuit)
-       q
-       (get_input_node_id q)"
+       (predecessor_id, get_input_node_id q) \<in> wire_edge_relation (reconnect_wire circuit operation_node_id q circuit) q)
+      \<and> has_unique_wire_successor (reconnect_wire circuit operation_node_id q circuit) q (get_input_node_id q)"
 
 proof -
-
   have incoming_operation_edge:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation circuit q"
+    "(predecessor_id, operation_node_id) \<in> wire_edge_relation circuit q"
     using predecessor_on_wire_correct[OF predecessor]
     unfolding wire_edge_relation_def
     by simp
 
   have outgoing_operation_edge:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation circuit q"
+    "(operation_node_id, successor_id) \<in> wire_edge_relation circuit q"
     using successor_on_wire_correct[OF successor]
     unfolding wire_edge_relation_def
     by simp
@@ -326,8 +212,7 @@ proof -
       "operation_node_id = get_input_node_id q"
 
     then have
-      "(predecessor_id, get_input_node_id q)
-         \<in> wire_edge_relation circuit q"
+      "(predecessor_id, get_input_node_id q) \<in> wire_edge_relation circuit q"
       using incoming_operation_edge
       by simp
 
@@ -343,8 +228,7 @@ proof -
       "successor_id = get_input_node_id q"
 
     then have
-      "(operation_node_id, get_input_node_id q)
-         \<in> wire_edge_relation circuit q"
+      "(operation_node_id, get_input_node_id q) \<in> wire_edge_relation circuit q"
       using outgoing_operation_edge
       by simp
 
@@ -354,20 +238,8 @@ proof -
   qed
 
   have relation_after:
-    "wire_edge_relation
-       (reconnect_wire
-          circuit
-          operation_node_id
-          q
-          circuit)
-       q
-     =
-     insert
-       (predecessor_id, successor_id)
-       (wire_edge_relation circuit q
-          -
-          {(predecessor_id, operation_node_id),
-           (operation_node_id, successor_id)})"
+    "wire_edge_relation (reconnect_wire circuit operation_node_id q circuit) q
+       = insert (predecessor_id, successor_id) (wire_edge_relation circuit q - {(predecessor_id, operation_node_id), (operation_node_id, successor_id)})"
     using
       reconnect_wire_successor_predecessor_characterisation[
         OF predecessor successor]
@@ -385,6 +257,7 @@ proof -
     unfolding has_unique_wire_successor_def
     by auto
 qed
+
 lemma reconnect_wire_preserves_input_boundary_from_same_relation:
   (* During a fold, predecessor and successor are always looked up in the
      fixed original circuit, while the edge rewrite is applied to the
@@ -396,142 +269,35 @@ lemma reconnect_wire_preserves_input_boundary_from_same_relation:
   *)
   assumes
     no_input_predecessor:
-      "\<nexists>predecessor_id.
-         (predecessor_id, get_input_node_id q)
-           \<in> wire_edge_relation current_circuit q"
+      "\<nexists>predecessor_id. (predecessor_id, get_input_node_id q) \<in> wire_edge_relation current_circuit q"
   and
     unique_input_successor:
-      "has_unique_wire_successor
-         current_circuit q (get_input_node_id q)"
+      "has_unique_wire_successor current_circuit q (get_input_node_id q)"
   and
     same_relation:
-      "wire_edge_relation current_circuit q =
-         wire_edge_relation original_circuit q"
+      "wire_edge_relation current_circuit q = wire_edge_relation original_circuit q"
   and
     predecessor:
-      "predecessor_on_wire
-         original_circuit operation_node_id q =
-         Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         original_circuit operation_node_id q =
-         Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   shows
-    "(\<nexists>predecessor_id.
-         (predecessor_id, get_input_node_id q)
-           \<in> wire_edge_relation
-                (reconnect_wire
-                   original_circuit
-                   operation_node_id
-                   q
-                   current_circuit)
-                q)
-     \<and>
-     has_unique_wire_successor
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-       (get_input_node_id q)"
+    "(\<nexists>predecessor_id. (predecessor_id, get_input_node_id q)
+       \<in> wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) q)
+         \<and> has_unique_wire_successor (reconnect_wire original_circuit operation_node_id q current_circuit) q (get_input_node_id q)"
+  using
+    has_unique_wire_successor_def
+    no_input_predecessor
+    predecessor
+    reconnect_wire_preserves_input_boundary
+    reconnect_wire_successor_predecessor_characterisation
+    same_relation
+    successor
+    unique_input_successor
+  by auto
 
-proof -
 
-  
-  have incoming_operation_edge_original:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation original_circuit q"
-    using predecessor_on_wire_correct[OF predecessor]
-    unfolding wire_edge_relation_def
-    by simp
-
-  have incoming_operation_edge:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation current_circuit q"
-    using incoming_operation_edge_original same_relation
-    by simp
-
-  have outgoing_operation_edge_original:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation original_circuit q"
-    using successor_on_wire_correct[OF successor]
-    unfolding wire_edge_relation_def
-    by simp
-
-  have outgoing_operation_edge:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation current_circuit q"
-    using outgoing_operation_edge_original same_relation
-    by simp
-
-  have operation_not_input:
-    "operation_node_id \<noteq> get_input_node_id q"
-  proof
-    assume
-      "operation_node_id = get_input_node_id q"
-
-    then have
-      "(predecessor_id, get_input_node_id q)
-         \<in> wire_edge_relation current_circuit q"
-      using incoming_operation_edge
-      by simp
-
-    then show False
-      using no_input_predecessor
-      by blast
-  qed
-
-  have successor_not_input:
-    "successor_id \<noteq> get_input_node_id q"
-  proof
-    assume
-      "successor_id = get_input_node_id q"
-
-    then have
-      "(operation_node_id, get_input_node_id q)
-         \<in> wire_edge_relation current_circuit q"
-      using outgoing_operation_edge
-      by simp
-
-    then show False
-      using no_input_predecessor
-      by blast
-  qed
-
-  have relation_after:
-    "wire_edge_relation
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-     =
-     insert
-       (predecessor_id, successor_id)
-       (wire_edge_relation current_circuit q
-          -
-          {(predecessor_id, operation_node_id),
-           (operation_node_id, successor_id)})"
-    using
-      reconnect_wire_successor_predecessor_characterisation[
-        OF predecessor successor]
-    by simp
-
-  show ?thesis
-    using
-      no_input_predecessor
-      unique_input_successor
-      incoming_operation_edge
-      operation_not_input
-      successor_not_input
-      relation_after
-    unfolding has_unique_wire_successor_def
-    by auto
-
-qed
 lemma reconnect_wire_preserves_other_wire_relation:
   (* Reconnecting the deleted node on wire q changes only q-labelled
      edges. Therefore, the immediate-edge relation of every different
@@ -540,15 +306,8 @@ lemma reconnect_wire_preserves_other_wire_relation:
     different_wire:
       "r \<noteq> q"
   shows
-    "wire_edge_relation
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       r
-     =
-     wire_edge_relation current_circuit r"
+    "wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) r
+     = wire_edge_relation current_circuit r"
 
   unfolding
     reconnect_wire_def
@@ -558,6 +317,7 @@ lemma reconnect_wire_preserves_other_wire_relation:
     make_edge_def
   using different_wire
   by (auto split: option.splits)
+
 lemma fold_reconnect_preserves_other_wire_relation:
   (* Reconnecting an entire list of wires different from r never changes
      the immediate edge relation on wire r. *)
@@ -565,27 +325,17 @@ lemma fold_reconnect_preserves_other_wire_relation:
   assumes other_wire:
     "r \<notin> set qs"
   shows
-    "wire_edge_relation
-       (fold
-          (reconnect_wire
-             original_circuit
-             operation_node_id)
-          qs
-          current_circuit)
-       r
-     =
-     wire_edge_relation current_circuit r"
+    "wire_edge_relation (fold (reconnect_wire original_circuit operation_node_id) qs current_circuit) r
+      = wire_edge_relation current_circuit r"
   using other_wire
 
 proof (induction qs arbitrary: current_circuit)
-
   case Nil
 
   show ?case
     by simp
 
 next
-
   case (Cons q qs)
   
   have q_neq:
@@ -603,31 +353,24 @@ next
       reconnect_wire_preserves_other_wire_relation[OF q_neq]
       Cons.IH[OF qs_not_contains]
     by simp
-
 qed
+
 lemma fold_reconnect_preserves_input_boundary:
   (* In a distinct list of affected wires containing q, all wires before
      and after q leave q's relation unchanged. The single reconnection of
      q preserves its input boundary. *)
   assumes
     no_input_predecessor:
-      "\<nexists>pred.
-         (pred, get_input_node_id q)
-           \<in> wire_edge_relation circuit q"
+      "\<nexists>pred. (pred, get_input_node_id q) \<in> wire_edge_relation circuit q"
   and
     unique_input_successor:
-      "has_unique_wire_successor
-         circuit q (get_input_node_id q)"
+      "has_unique_wire_successor circuit q (get_input_node_id q)"
   and
     predecessor:
-      "predecessor_on_wire
-         circuit operation_node_id q =
-         Some predecessor_id"
+      "predecessor_on_wire circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         circuit operation_node_id q =
-         Some successor_id"
+      "successor_on_wire circuit operation_node_id q = Some successor_id"
   and
     distinct_wires:
       "distinct qs"
@@ -636,24 +379,10 @@ lemma fold_reconnect_preserves_input_boundary:
       "q \<in> set qs"
   shows
     "(\<nexists>pred.
-         (pred, get_input_node_id q)
-           \<in> wire_edge_relation
-                (fold
-                   (reconnect_wire circuit operation_node_id)
-                   qs
-                   circuit)
-                q)
-     \<and>
-     has_unique_wire_successor
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          qs
-          circuit)
-       q
-       (get_input_node_id q)"
+     (pred, get_input_node_id q) \<in> wire_edge_relation (fold (reconnect_wire circuit operation_node_id) qs circuit) q)
+    \<and> has_unique_wire_successor (fold (reconnect_wire circuit operation_node_id) qs circuit) q (get_input_node_id q)"
 
 proof -
-
   obtain before after where
     qs_decomposition:
       "qs = before @ q # after"
@@ -670,22 +399,12 @@ proof -
     using distinct_wires qs_decomposition
     by auto
 
-  let ?before_circuit =
-    "fold
-       (reconnect_wire circuit operation_node_id)
-       before
-       circuit"
+  let ?before_circuit = "fold (reconnect_wire circuit operation_node_id) before circuit"
 
-  let ?q_circuit =
-    "reconnect_wire
-       circuit
-       operation_node_id
-       q
-       ?before_circuit"
+  let ?q_circuit = "reconnect_wire circuit operation_node_id q ?before_circuit"
 
   have before_same_relation:
-    "wire_edge_relation ?before_circuit q =
-       wire_edge_relation circuit q"
+    "wire_edge_relation ?before_circuit q = wire_edge_relation circuit q"
     using
       fold_reconnect_preserves_other_wire_relation[
         where original_circuit = circuit
@@ -697,17 +416,14 @@ proof -
     by simp
 
   have no_input_predecessor_before:
-    "\<nexists>pred.
-       (pred, get_input_node_id q)
-         \<in> wire_edge_relation ?before_circuit q"
+    "\<nexists>pred. (pred, get_input_node_id q) \<in> wire_edge_relation ?before_circuit q"
     using
       no_input_predecessor
       before_same_relation
     by simp
 
   have unique_input_successor_before:
-    "has_unique_wire_successor
-       ?before_circuit q (get_input_node_id q)"
+    "has_unique_wire_successor ?before_circuit q (get_input_node_id q)"
     using
       unique_input_successor
       before_same_relation
@@ -716,11 +432,8 @@ proof -
 
   have boundary_after_q:
     "(\<nexists>pred.
-         (pred, get_input_node_id q)
-           \<in> wire_edge_relation ?q_circuit q)
-     \<and>
-     has_unique_wire_successor
-       ?q_circuit q (get_input_node_id q)"
+       (pred, get_input_node_id q) \<in> wire_edge_relation ?q_circuit q)
+       \<and> has_unique_wire_successor ?q_circuit q (get_input_node_id q)"
     using
       reconnect_wire_preserves_input_boundary_from_same_relation[
         OF
@@ -732,14 +445,7 @@ proof -
     by simp
 
   have after_same_relation:
-    "wire_edge_relation
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          after
-          ?q_circuit)
-       q
-     =
-     wire_edge_relation ?q_circuit q"
+    "wire_edge_relation (fold (reconnect_wire circuit operation_node_id) after ?q_circuit) q = wire_edge_relation ?q_circuit q"
     using
       fold_reconnect_preserves_other_wire_relation[
         where original_circuit = circuit
@@ -757,75 +463,24 @@ proof -
       qs_decomposition
     unfolding has_unique_wire_successor_def
     by auto
-
 qed
-lemma delete_operation_removes_operation_node[simp]:
-  (* If node_id stores an OperationNode, then deleting that operation
-     removes it from the circuit. *)
 
+lemma delete_operation_removes_operation_node[simp]:
+  (* If node_id stores an OperationNode, then deleting that operation removes it from the circuit. *)
   assumes operation_node:
     "nodes circuit node_id = Some (OperationNode op)"
 
   shows
     "nodes (delete_operation circuit node_id) node_id = None"
+  
+  using
+    delete_operation_nodes
+    operation_node
+  by simp
 
-proof -
-
-  have delete_case:
-    "delete_operation circuit node_id =
-      (let
-         reconnect_wire =
-           (\<lambda>q current_circuit.
-              case
-                (predecessor_on_wire circuit node_id q,
-                 successor_on_wire circuit node_id q)
-              of
-
-                (Some predecessor, Some successor) \<Rightarrow>
-                  insert_edge
-                    (make_edge predecessor successor q)
-                    (delete_edge
-                      (make_edge node_id successor q)
-                      (delete_edge
-                        (make_edge predecessor node_id q)
-                        current_circuit))
-
-              | _ \<Rightarrow> current_circuit);
-
-         reconnected_circuit =
-           fold
-             reconnect_wire
-             (op_qargs op)
-             circuit;
-
-         circuit_without_node =
-           reconnected_circuit
-             \<lparr>nodes :=
-                (nodes reconnected_circuit)
-                  (node_id := None)\<rparr>
-
-       in
-         circuit_without_node)"
-    using operation_node 
-    unfolding
-      delete_operation_def
-      Let_def
-      reconnect_wire_def
-    by simp
-
-  show ?thesis
-    unfolding
-      delete_case
-      Let_def
-    by simp
-qed
 lemma reconnect_wire_preserves_num_qubits:
-  (* Reconnecting a single wire only updates the circuit's edge set.
-     It does not change the number of qubits in the circuit. *)
-  "num_qubits
-     (reconnect_wire original_circuit node_id q current_circuit)
-   =
-   num_qubits current_circuit"
+  (* Reconnecting a single wire only updates the circuit's edge set. It does not change the number of qubits in the circuit. *)
+  "num_qubits (reconnect_wire original_circuit node_id q current_circuit) = num_qubits current_circuit"
   
   unfolding
     reconnect_wire_def
@@ -835,6 +490,7 @@ lemma reconnect_wire_preserves_num_qubits:
   by (auto split:
         option.splits
         prod.splits)
+
 lemma reconnect_wire_edge_cases:
   (* Every edge present after reconnecting one wire is either:
 
@@ -847,32 +503,18 @@ lemma reconnect_wire_edge_cases:
   *)
   assumes
     edge_after:
-      "e \<in>
-       edges
-         (reconnect_wire
-           original_circuit
-           operation_node_id
-           q
-           current_circuit)"
+      "e \<in> edges (reconnect_wire original_circuit operation_node_id q current_circuit)"
   shows
     "e \<in> edges current_circuit
-     \<or>
-     (\<exists>predecessor successor. predecessor_on_wire original_circuit operation_node_id q
-        = Some predecessor
-      \<and>
-        successor_on_wire original_circuit operation_node_id q
-        = Some successor
-      \<and>
-        e = make_edge predecessor successor q)"
-proof -
-  show ?thesis
-    using edge_after
-    unfolding reconnect_wire_def
-    by (auto
-          split:
-            option.splits
-            prod.splits)
-qed
+   \<or> (\<exists>predecessor successor. predecessor_on_wire original_circuit operation_node_id q = Some predecessor
+       \<and> successor_on_wire original_circuit operation_node_id q = Some successor
+       \<and> e = make_edge predecessor successor q)"
+  
+  using edge_after
+  unfolding reconnect_wire_def
+  by (auto split: option.splits prod.splits)
+
+
 lemma fold_reconnect_wire_edge_cases:
   (*
     Every edge present after reconnecting a list of wires is either an
@@ -881,31 +523,16 @@ lemma fold_reconnect_wire_edge_cases:
   *)
   assumes
     edge_after:
-      "e \<in>
-       edges
-         (fold
-           (reconnect_wire original_circuit operation_node_id)
-           qs
-           current_circuit)"
+      "e \<in> edges (fold (reconnect_wire original_circuit operation_node_id) qs current_circuit)"
   shows
     "e \<in> edges current_circuit
-     \<or>
-     (\<exists>q \<in> set qs.
-        \<exists>predecessor successor.
-          predecessor_on_wire
-            original_circuit operation_node_id q
-            = Some predecessor
-        \<and>
-          successor_on_wire
-            original_circuit operation_node_id q
-            = Some successor
-        \<and>
-          e = make_edge predecessor successor q)"
+    \<or> (\<exists>q \<in> set qs. \<exists>predecessor successor. predecessor_on_wire original_circuit operation_node_id q = Some predecessor
+       \<and> successor_on_wire original_circuit operation_node_id q = Some successor
+       \<and> e = make_edge predecessor successor q)"
   
   using edge_after
 
 proof (induction qs arbitrary: current_circuit)
-
   case Nil
 
   (*
@@ -917,27 +544,16 @@ proof (induction qs arbitrary: current_circuit)
     by simp
 
 next
-
   case (Cons q qs)
 
   (*
     The first fold step reconnects q. The remaining wires qs are then
     processed using that updated circuit as the new accumulator.
   *)
-  let ?updated_circuit =
-    "reconnect_wire
-       original_circuit
-       operation_node_id
-       q
-       current_circuit"
+  let ?updated_circuit = "reconnect_wire original_circuit operation_node_id q current_circuit"
 
   have edge_after_remaining_wires:
-    "e \<in>
-     edges
-       (fold
-         (reconnect_wire original_circuit operation_node_id)
-         qs
-         ?updated_circuit)"
+    "e \<in> edges (fold (reconnect_wire original_circuit operation_node_id) qs ?updated_circuit)"
     using Cons.prems
     by simp
 
@@ -948,66 +564,17 @@ next
   *)
   have remaining_wire_cases:
     "e \<in> edges ?updated_circuit
-     \<or>
-     (\<exists>q' \<in> set qs.
-        \<exists>predecessor successor.
-          predecessor_on_wire
-            original_circuit operation_node_id q'
-            = Some predecessor
-        \<and>
-          successor_on_wire
-            original_circuit operation_node_id q'
-            = Some successor
-        \<and>
-          e = make_edge predecessor successor q')"
+   \<or> (\<exists>q' \<in> set qs. \<exists>predecessor successor. predecessor_on_wire original_circuit operation_node_id q' = Some predecessor
+       \<and> successor_on_wire original_circuit operation_node_id q' = Some successor
+       \<and> e = make_edge predecessor successor q')"
     using Cons.IH[of ?updated_circuit]
           edge_after_remaining_wires
     by blast
 
     from remaining_wire_cases show ?case
-  proof
-
-    assume edge_after_first_reconnection:
-      "e \<in> edges ?updated_circuit"
-
-    have first_wire_cases:
-      "e \<in> edges current_circuit
-       \<or>
-       (\<exists>predecessor successor.
-          predecessor_on_wire
-            original_circuit operation_node_id q
-            = Some predecessor
-        \<and>
-          successor_on_wire
-            original_circuit operation_node_id q
-            = Some successor
-        \<and>
-          e = make_edge predecessor successor q)"
-      using edge_after_first_reconnection
-      by (rule reconnect_wire_edge_cases)
-
-    then show ?thesis
-      by auto
-
-  next
-
-    assume bypass_on_remaining_wire:
-      "\<exists>q' \<in> set qs.
-         \<exists>predecessor successor.
-           predecessor_on_wire
-             original_circuit operation_node_id q'
-             = Some predecessor
-         \<and>
-           successor_on_wire
-             original_circuit operation_node_id q'
-             = Some successor
-         \<and>
-           e = make_edge predecessor successor q'"
-
-    then show ?thesis
-      by simp
+      by (meson list.set_intros(1,2) reconnect_wire_edge_cases)
   qed
-qed
+
 lemma reconnect_wire_inserted_edge_well_formed:
   (*
     Whenever reconnect_wire inserts a bypass edge, that edge is
@@ -1023,19 +590,14 @@ lemma reconnect_wire_inserted_edge_well_formed:
       "is_valid_circuit circuit"
   and
     predecessor:
-      "predecessor_on_wire circuit operation_node_id q =
-         Some predecessor_node_id"
+      "predecessor_on_wire circuit operation_node_id q = Some predecessor_node_id"
   and
     successor:
-      "successor_on_wire circuit operation_node_id q =
-         Some successor_node_id"
+      "successor_on_wire circuit operation_node_id q = Some successor_node_id"
   shows
-    "is_well_formed_edge
-       (reconnect_wire circuit operation_node_id q circuit)
-       (make_edge predecessor_node_id successor_node_id q)"
+    "is_well_formed_edge (reconnect_wire circuit operation_node_id q circuit) (make_edge predecessor_node_id successor_node_id q)"
 
 proof -
-
   (*
     Structural validity of the original circuit guarantees that every
     edge already present in it is well formed.
@@ -1053,8 +615,7 @@ proof -
     operation_node_id from predecessor_node_id on q.
   *)
   have predecessor_edge:
-    "make_edge predecessor_node_id operation_node_id q
-       \<in> edges circuit"
+    "make_edge predecessor_node_id operation_node_id q \<in> edges circuit"
     using predecessor
     by (rule predecessor_on_wire_correct)
 
@@ -1063,24 +624,19 @@ proof -
     operation_node_id toward successor_node_id on q.
   *)
   have successor_edge:
-    "make_edge operation_node_id successor_node_id q
-       \<in> edges circuit"
+    "make_edge operation_node_id successor_node_id q \<in> edges circuit"
     using successor
     by (rule successor_on_wire_correct)
 
   (* Both incident edges are well formed in the original valid circuit. *)
   have predecessor_edge_well_formed:
-    "is_well_formed_edge
-       circuit
-       (make_edge predecessor_node_id operation_node_id q)"
+    "is_well_formed_edge circuit (make_edge predecessor_node_id operation_node_id q)"
     using original_edges_well_formed predecessor_edge
     unfolding are_well_formed_edges_def
     by blast
 
   have successor_edge_well_formed:
-    "is_well_formed_edge
-       circuit
-       (make_edge operation_node_id successor_node_id q)"
+    "is_well_formed_edge circuit (make_edge operation_node_id successor_node_id q)"
     using original_edges_well_formed successor_edge
     unfolding are_well_formed_edges_def
     by blast
@@ -1096,11 +652,9 @@ proof -
   have predecessor_properties:
     "node_exists circuit predecessor_node_id
      \<and> qubit_in_circuit circuit q
-     \<and>
-       (case nodes circuit predecessor_node_id of
-          None \<Rightarrow> False
-        | Some predecessor_node \<Rightarrow>
-            node_uses_qubit predecessor_node q)"
+     \<and> (case nodes circuit predecessor_node_id
+       of None \<Rightarrow> False
+       | Some predecessor_node \<Rightarrow> node_uses_qubit predecessor_node q)"
     using
       predecessor_edge_well_formed
       is_well_formed_edge_def
@@ -1114,11 +668,9 @@ proof -
   *)
   have successor_properties:
     "node_exists circuit successor_node_id
-     \<and>
-       (case nodes circuit successor_node_id of
-          None \<Rightarrow> False
-        | Some successor_node \<Rightarrow>
-            node_uses_qubit successor_node q)"
+   \<and> (case nodes circuit successor_node_id
+     of None \<Rightarrow> False
+     | Some successor_node \<Rightarrow> node_uses_qubit successor_node q)"
     using successor_edge_well_formed
     unfolding
       is_well_formed_edge_def
@@ -1131,26 +683,15 @@ proof -
     identical before and after reconnection.
   *)
   have predecessor_node_preserved:
-    "nodes
-       (reconnect_wire circuit operation_node_id q circuit)
-       predecessor_node_id
-     =
-     nodes circuit predecessor_node_id"
+    "nodes (reconnect_wire circuit operation_node_id q circuit) predecessor_node_id = nodes circuit predecessor_node_id"
     by (rule reconnect_wire_preserves_nodes)
 
   have successor_node_preserved:
-    "nodes
-       (reconnect_wire circuit operation_node_id q circuit)
-       successor_node_id
-     =
-     nodes circuit successor_node_id"
+    "nodes (reconnect_wire circuit operation_node_id q circuit) successor_node_id = nodes circuit successor_node_id"
     by (rule reconnect_wire_preserves_nodes)
 
   have num_qubits_preserved:
-    "num_qubits
-       (reconnect_wire circuit operation_node_id q circuit)
-     =
-     num_qubits circuit"
+    "num_qubits (reconnect_wire circuit operation_node_id q circuit) = num_qubits circuit"
     by (rule reconnect_wire_preserves_num_qubits)
 
   (*
@@ -1174,13 +715,7 @@ qed
 lemma fold_reconnect_wire_preserves_num_qubits:
   (* Reconnecting every wire in a list preserves the circuit's qubit count.
      This lifts the single-wire preservation result across the fold. *)
-  "num_qubits
-     (fold
-       (reconnect_wire original_circuit node_id)
-       qs
-       current_circuit)
-   =
-   num_qubits current_circuit"
+  "num_qubits (fold (reconnect_wire original_circuit node_id) qs current_circuit) = num_qubits current_circuit"
 
 proof (induction qs arbitrary: current_circuit)
   case Nil
@@ -1192,33 +727,12 @@ next
   case (Cons q qs)
 
   have first_reconnection:
-    "num_qubits
-       (reconnect_wire
-         original_circuit
-         node_id
-         q
-         current_circuit)
-     =
-     num_qubits current_circuit"
+    "num_qubits (reconnect_wire original_circuit node_id q current_circuit) = num_qubits current_circuit"
     by (rule reconnect_wire_preserves_num_qubits)
 
   have remaining_reconnections:
-    "num_qubits
-       (fold
-         (reconnect_wire original_circuit node_id)
-         qs
-         (reconnect_wire
-           original_circuit
-           node_id
-           q
-           current_circuit))
-     =
-     num_qubits
-       (reconnect_wire
-         original_circuit
-         node_id
-         q
-         current_circuit)"
+    "num_qubits (fold (reconnect_wire original_circuit node_id) qs (reconnect_wire original_circuit node_id q current_circuit))
+     = num_qubits (reconnect_wire original_circuit node_id q current_circuit)"
     using Cons
     by simp
 
@@ -1226,6 +740,7 @@ next
     using first_reconnection remaining_reconnections
     by simp
 qed
+
 lemma operation_incident_edge_on_wire_cases:
   (*
     In a valid circuit, every edge on q that is incident to an operation
@@ -1241,8 +756,7 @@ lemma operation_incident_edge_on_wire_cases:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     operation_uses_wire:
       "q \<in> set (op_qargs op)"
@@ -1254,22 +768,12 @@ lemma operation_incident_edge_on_wire_cases:
       "edge_wire e = q"
   and
     incident:
-      "edge_source e = operation_node_id
-       \<or> edge_target e = operation_node_id"
+      "edge_source e = operation_node_id \<or> edge_target e = operation_node_id"
   shows
-    "(\<exists>predecessor.
-        predecessor_on_wire circuit operation_node_id q =
-          Some predecessor
-      \<and>
-        e = make_edge predecessor operation_node_id q)
-     \<or>
-     (\<exists>successor.
-        successor_on_wire circuit operation_node_id q =
-          Some successor
-      \<and>
-        e = make_edge operation_node_id successor q)"
-proof -
+    "(\<exists>predecessor. predecessor_on_wire circuit operation_node_id q = Some predecessor \<and> e = make_edge predecessor operation_node_id q)
+     \<or> (\<exists>successor. successor_on_wire circuit operation_node_id q = Some successor \<and> e = make_edge operation_node_id successor q)"
 
+proof -
   (* The stored operation is well formed, so every qubit it uses is a
      valid circuit qubit. *)
   have operation_in_circuit:
@@ -1299,8 +803,7 @@ proof -
   (* Since OperationNode op uses q, wire linearity gives a unique
      predecessor and a unique successor on that wire. *)
   have unique_predecessor:
-    "has_unique_wire_predecessor
-       circuit q operation_node_id"
+    "has_unique_wire_predecessor circuit q operation_node_id"
     using
       linear_q
       operation_exists
@@ -1309,8 +812,7 @@ proof -
     by simp
 
   have unique_successor:
-    "has_unique_wire_successor
-       circuit q operation_node_id"
+    "has_unique_wire_successor circuit q operation_node_id"
     using
       linear_q
       operation_exists
@@ -1327,8 +829,7 @@ proof -
     (* The given edge itself witnesses an outgoing q-edge from the
        operation node. *)
     have given_successor_relation:
-      "(operation_node_id, edge_target e)
-       \<in> wire_edge_relation circuit q"
+      "(operation_node_id, edge_target e) \<in> wire_edge_relation circuit q"
       using
         incident_edge
         source_is_operation
@@ -1339,15 +840,11 @@ proof -
     (* Obtain the unique successor promised by wire linearity. *)
     obtain unique_successor_id where
       successor_relation:
-        "(operation_node_id, unique_successor_id)
-         \<in> wire_edge_relation circuit q"
+        "(operation_node_id, unique_successor_id) \<in> wire_edge_relation circuit q"
     and
       successor_unique:
         "\<And>candidate.
-           (operation_node_id, candidate)
-           \<in> wire_edge_relation circuit q
-           \<Longrightarrow>
-           candidate = unique_successor_id"
+         (operation_node_id, candidate) \<in> wire_edge_relation circuit q \<Longrightarrow> candidate = unique_successor_id"
       using unique_successor
       unfolding has_unique_wire_successor_def
       by blast
@@ -1361,13 +858,11 @@ proof -
     (* successor_on_wire returns some outgoing q-edge. Its target must
        therefore equal the same unique successor. *)
     have outgoing_exists:
-      "\<exists>outgoing.
-         outgoing_edge circuit operation_node_id q =
-           Some outgoing"
+      "\<exists>outgoing. outgoing_edge circuit operation_node_id q = Some outgoing"
     proof -
       have
-        "\<exists>outgoing \<in> edges circuit.
-           edge_source outgoing = operation_node_id
+        "\<exists>outgoing \<in> edges circuit. 
+          edge_source outgoing = operation_node_id
          \<and> edge_wire outgoing = q"
         using
           incident_edge
@@ -1382,8 +877,7 @@ proof -
 
     then obtain outgoing where
       outgoing:
-        "outgoing_edge circuit operation_node_id q =
-           Some outgoing"
+        "outgoing_edge circuit operation_node_id q = Some outgoing"
       by blast
 
     have outgoing_properties:
@@ -1394,8 +888,7 @@ proof -
       by (rule outgoing_edge_correct)
 
     have selected_successor_relation:
-      "(operation_node_id, edge_target outgoing)
-       \<in> wire_edge_relation circuit q"
+      "(operation_node_id, edge_target outgoing) \<in> wire_edge_relation circuit q"
       using outgoing_properties
       unfolding wire_edge_relation_def
       by (cases outgoing) (simp add: make_edge_def)
@@ -1406,19 +899,14 @@ proof -
       by blast
 
     have successor_lookup:
-      "successor_on_wire circuit operation_node_id q =
-         Some unique_successor_id"
+      "successor_on_wire circuit operation_node_id q = Some unique_successor_id"
       using outgoing selected_target
       unfolding successor_on_wire_def
       by simp
 
     (* The record fields determine e completely. *)
     have edge_shape:
-      "e =
-       make_edge
-         operation_node_id
-         unique_successor_id
-         q"
+      "e = make_edge operation_node_id unique_successor_id q"
       using
         source_is_operation
         target_is_unique_successor
@@ -1437,8 +925,7 @@ proof -
     (* The given edge itself witnesses an incoming q-edge to the
        operation node. *)
     have given_predecessor_relation:
-      "(edge_source e, operation_node_id)
-       \<in> wire_edge_relation circuit q"
+      "(edge_source e, operation_node_id) \<in> wire_edge_relation circuit q"
       using
         incident_edge
         target_is_operation
@@ -1449,15 +936,10 @@ proof -
     (* Obtain the unique predecessor promised by wire linearity. *)
     obtain unique_predecessor_id where
       predecessor_relation:
-        "(unique_predecessor_id, operation_node_id)
-         \<in> wire_edge_relation circuit q"
+        "(unique_predecessor_id, operation_node_id) \<in> wire_edge_relation circuit q"
     and
       predecessor_unique:
-        "\<And>candidate.
-           (candidate, operation_node_id)
-           \<in> wire_edge_relation circuit q
-           \<Longrightarrow>
-           candidate = unique_predecessor_id"
+        "\<And>candidate. (candidate, operation_node_id) \<in> wire_edge_relation circuit q \<Longrightarrow> candidate = unique_predecessor_id"
       using unique_predecessor
       unfolding has_unique_wire_predecessor_def
       by blast
@@ -1471,41 +953,28 @@ proof -
     (* predecessor_on_wire returns some incoming q-edge. Its source must
        therefore equal the same unique predecessor. *)
     have incoming_exists:
-      "\<exists>incoming.
-         incoming_edge circuit operation_node_id q =
-           Some incoming"
-    proof -
-      have
-        "\<exists>incoming \<in> edges circuit.
-           edge_target incoming = operation_node_id
-         \<and> edge_wire incoming = q"
-        using
-          incident_edge
-          target_is_operation
-          edge_on_wire
-        by blast
-
-      then show ?thesis
-        unfolding incoming_edge_def
-        by (auto intro: someI_ex)
-    qed
+      "\<exists>incoming. incoming_edge circuit operation_node_id q = Some incoming"
+      using
+        edge_on_wire
+        incident_edge
+        incoming_edge_def
+        target_is_operation
+      by auto
 
     then obtain incoming where
       incoming:
-        "incoming_edge circuit operation_node_id q =
-           Some incoming"
+        "incoming_edge circuit operation_node_id q = Some incoming"
       by blast
 
     have incoming_properties:
       "incoming \<in> edges circuit
-       \<and> edge_target incoming = operation_node_id
-       \<and> edge_wire incoming = q"
+     \<and> edge_target incoming = operation_node_id
+     \<and> edge_wire incoming = q"
       using incoming
       by (rule incoming_edge_correct)
 
     have selected_predecessor_relation:
-      "(edge_source incoming, operation_node_id)
-       \<in> wire_edge_relation circuit q"
+      "(edge_source incoming, operation_node_id) \<in> wire_edge_relation circuit q"
       using incoming_properties
       unfolding wire_edge_relation_def
       by (cases incoming) (simp add: make_edge_def)
@@ -1516,19 +985,14 @@ proof -
       by blast
 
     have predecessor_lookup:
-      "predecessor_on_wire circuit operation_node_id q =
-         Some unique_predecessor_id"
+      "predecessor_on_wire circuit operation_node_id q = Some unique_predecessor_id"
       using incoming selected_source
       unfolding predecessor_on_wire_def
       by simp
 
     (* The record fields determine e completely. *)
     have edge_shape:
-      "e =
-       make_edge
-         unique_predecessor_id
-         operation_node_id
-         q"
+      "e = make_edge unique_predecessor_id operation_node_id q"
       using
         source_is_unique_predecessor
         target_is_operation
@@ -1542,6 +1006,7 @@ proof -
       by blast
   qed
 qed
+
 lemma fold_reconnect_wire_removes_incident_edges:
   (*
     After reconnecting every wire used by the deleted operation, no edge
@@ -1559,21 +1024,14 @@ lemma fold_reconnect_wire_removes_incident_edges:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     remaining_edge:
-      "e \<in>
-       edges
-         (fold
-           (reconnect_wire circuit operation_node_id)
-           (op_qargs op)
-           circuit)"
+      "e \<in> edges (fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit)"
   shows
-    "edge_source e \<noteq> operation_node_id
-     \<and> edge_target e \<noteq> operation_node_id"
-proof -
+    "edge_source e \<noteq> operation_node_id \<and> edge_target e \<noteq> operation_node_id"
 
+proof -
   (* The operation stored at operation_node_id is valid. In particular,
      its qubit arguments are pairwise distinct. *)
   have operation_valid:
@@ -1614,31 +1072,20 @@ proof -
   proof (rule ccontr)
 
     assume not_non_incident:
-      "\<not>
-        (edge_source e \<noteq> operation_node_id
-         \<and> edge_target e \<noteq> operation_node_id)"
+      "\<not> (edge_source e \<noteq> operation_node_id \<and> edge_target e \<noteq> operation_node_id)"
 
     then have incident:
       "edge_source e = operation_node_id
-       \<or> edge_target e = operation_node_id"
+     \<or> edge_target e = operation_node_id"
       by simp
 
     (* Every edge produced by the fold is either inherited from the
        original circuit or is a newly inserted bypass edge. *)
     have edge_origin:
       "e \<in> edges circuit
-       \<or>
-       (\<exists>q \<in> set (op_qargs op).
-          \<exists>predecessor successor.
-            predecessor_on_wire
-              circuit operation_node_id q
-              = Some predecessor
-          \<and>
-            successor_on_wire
-              circuit operation_node_id q
-              = Some successor
-          \<and>
-            e = make_edge predecessor successor q)"
+     \<or> (\<exists>q \<in> set (op_qargs op). \<exists>predecessor successor. predecessor_on_wire circuit operation_node_id q = Some predecessor
+           \<and> successor_on_wire circuit operation_node_id q = Some successor
+           \<and> e = make_edge predecessor successor q)"
       using remaining_edge
       by (rule fold_reconnect_wire_edge_cases)
 
@@ -1673,18 +1120,11 @@ proof -
          selected by reconnect_wire on its wire. *)
       have selected_edge_cases:
         "(\<exists>predecessor.
-            predecessor_on_wire
-              circuit operation_node_id ?q
-              = Some predecessor
-          \<and>
-            e = make_edge predecessor operation_node_id ?q)
-         \<or>
-         (\<exists>successor.
-            successor_on_wire
-              circuit operation_node_id ?q
-              = Some successor
-          \<and>
-            e = make_edge operation_node_id successor ?q)"
+             predecessor_on_wire circuit operation_node_id ?q = Some predecessor
+             \<and> e = make_edge predecessor operation_node_id ?q)
+       \<or> (\<exists>successor.
+             successor_on_wire circuit operation_node_id ?q = Some successor
+           \<and> e = make_edge operation_node_id successor ?q)"
         using
           valid_circuit
           operation_exists
@@ -1701,12 +1141,7 @@ proof -
         processed and cannot be recreated later.
       *)
       have selected_edge_removed:
-        "e \<notin>
-         edges
-           (fold
-             (reconnect_wire circuit operation_node_id)
-             (op_qargs op)
-             circuit)"
+        "e \<notin> edges (fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit)"
       proof -
         obtain before after where
           operation_wires_split:
@@ -1725,33 +1160,21 @@ proof -
           by auto
 
         let ?before_circuit =
-          "fold
-             (reconnect_wire circuit operation_node_id)
-             before
-             circuit"
+          "fold (reconnect_wire circuit operation_node_id) before circuit"
 
         let ?q_circuit =
-          "reconnect_wire
-             circuit
-             operation_node_id
-             ?q
-             ?before_circuit"
+          "reconnect_wire circuit operation_node_id ?q ?before_circuit"
 
         (* Both adjacent lookups exist. Whichever side of the operation e
            occupies, wire linearity supplies the other side as well. *)
                 have predecessor_exists:
-          "\<exists>predecessor.
-             predecessor_on_wire
-               circuit operation_node_id ?q
-             = Some predecessor"
+          "\<exists>predecessor. predecessor_on_wire circuit operation_node_id ?q = Some predecessor"
         proof -
-
           (* Wire linearity guarantees that the operation has an incoming
              neighbour on ?q. *)
           obtain predecessor where
             predecessor_relation:
-              "(predecessor, operation_node_id)
-               \<in> wire_edge_relation circuit ?q"
+              "(predecessor, operation_node_id) \<in> wire_edge_relation circuit ?q"
             using
               valid_circuit
               operation_exists
@@ -1768,30 +1191,23 @@ proof -
             by blast
 
           have incoming_edge_exists:
-            "make_edge predecessor operation_node_id ?q
-             \<in> edges circuit"
+            "make_edge predecessor operation_node_id ?q \<in> edges circuit"
             using predecessor_relation
             unfolding wire_edge_relation_def
             by simp
 
           have incoming_exists:
             "\<exists>incoming \<in> edges circuit.
-               edge_target incoming = operation_node_id
-             \<and> edge_wire incoming = ?q"
+                 edge_target incoming = operation_node_id
+               \<and> edge_wire incoming = ?q"
             proof
             show
-              "make_edge predecessor operation_node_id ?q
-               \<in> edges circuit"
+              "make_edge predecessor operation_node_id ?q \<in> edges circuit"
               using incoming_edge_exists .
 
             show
-              "edge_target
-                 (make_edge predecessor operation_node_id ?q)
-               = operation_node_id
-               \<and>
-               edge_wire
-                 (make_edge predecessor operation_node_id ?q)
-               = ?q"
+              "edge_target (make_edge predecessor operation_node_id ?q) = operation_node_id
+             \<and> edge_wire (make_edge predecessor operation_node_id ?q) = ?q"
               unfolding make_edge_def
               by simp
           qed
@@ -1807,18 +1223,13 @@ proof -
         qed
 
         have successor_exists:
-          "\<exists>successor.
-             successor_on_wire
-               circuit operation_node_id ?q
-             = Some successor"
+          "\<exists>successor. successor_on_wire circuit operation_node_id ?q = Some successor"
         proof -
-
           (* Wire linearity guarantees an outgoing neighbour of the
              operation node on ?q. *)
           obtain successor where
             successor_relation:
-              "(operation_node_id, successor)
-               \<in> wire_edge_relation circuit ?q"
+              "(operation_node_id, successor) \<in> wire_edge_relation circuit ?q"
             using
               valid_circuit
               operation_exists
@@ -1834,8 +1245,7 @@ proof -
               has_unique_wire_successor_def
             by blast
 
-                  let ?outgoing =
-            "make_edge operation_node_id successor ?q"
+          let ?outgoing = "make_edge operation_node_id successor ?q"
 
           have outgoing_in_edges:
             "?outgoing \<in> edges circuit"
@@ -1855,8 +1265,8 @@ proof -
 
           have outgoing_exists:
             "\<exists>outgoing \<in> edges circuit.
-               edge_source outgoing = operation_node_id
-             \<and> edge_wire outgoing = ?q"
+                 edge_source outgoing = operation_node_id
+                \<and> edge_wire outgoing = ?q"
             using
               outgoing_in_edges
               outgoing_source
@@ -1867,8 +1277,8 @@ proof -
              on wire ?q. *)
           have outgoing_exists:
             "\<exists>outgoing \<in> edges circuit.
-               edge_source outgoing = operation_node_id
-             \<and> edge_wire outgoing = ?q"
+                   edge_source outgoing = operation_node_id
+                 \<and> edge_wire outgoing = ?q"
             using
               outgoing_in_edges
               outgoing_source
@@ -1887,17 +1297,13 @@ proof -
 
         obtain predecessor where
           predecessor_lookup:
-            "predecessor_on_wire
-               circuit operation_node_id ?q
-             = Some predecessor"
+            "predecessor_on_wire circuit operation_node_id ?q = Some predecessor"
           using predecessor_exists
           by auto
 
         obtain successor where
           successor_lookup:
-            "successor_on_wire
-               circuit operation_node_id ?q
-             = Some successor"
+            "successor_on_wire circuit operation_node_id ?q = Some successor"
           using successor_exists
           by blast
 
@@ -1910,23 +1316,20 @@ proof -
             "predecessor = operation_node_id"
 
           have self_loop_edge:
-            "make_edge operation_node_id operation_node_id ?q
-             \<in> edges circuit"
+            "make_edge operation_node_id operation_node_id ?q \<in> edges circuit"
             using
               predecessor_on_wire_correct[OF predecessor_lookup]
               predecessor_eq
             by simp
 
           have self_loop_relation:
-            "(operation_node_id, operation_node_id)
-             \<in> edge_relation circuit"
+            "(operation_node_id, operation_node_id) \<in> edge_relation circuit"
             using self_loop_edge
             unfolding edge_relation_def make_edge_def
             by force
 
           have self_reachable:
-            "(operation_node_id, operation_node_id)
-             \<in> (edge_relation circuit)\<^sup>+"
+            "(operation_node_id, operation_node_id) \<in> (edge_relation circuit)\<^sup>+"
             using self_loop_relation
             by (rule r_into_trancl)
 
@@ -1945,23 +1348,20 @@ proof -
             "successor = operation_node_id"
 
           have self_loop_edge:
-            "make_edge operation_node_id operation_node_id ?q
-             \<in> edges circuit"
+            "make_edge operation_node_id operation_node_id ?q \<in> edges circuit"
             using
               successor_on_wire_correct[OF successor_lookup]
               successor_eq
             by simp
 
           have self_loop_relation:
-            "(operation_node_id, operation_node_id)
-             \<in> edge_relation circuit"
+            "(operation_node_id, operation_node_id) \<in> edge_relation circuit"
             using self_loop_edge
             unfolding edge_relation_def make_edge_def
             by force
 
           have self_reachable:
-            "(operation_node_id, operation_node_id)
-             \<in> (edge_relation circuit)\<^sup>+"
+            "(operation_node_id, operation_node_id) \<in> (edge_relation circuit)\<^sup>+"
             using self_loop_relation
             by (rule r_into_trancl)
 
@@ -1976,12 +1376,7 @@ proof -
            is operation_node_id. *)
                
         have q_step_edges:
-          "edges ?q_circuit =
-             insert
-               (make_edge predecessor successor ?q)
-               ((edges ?before_circuit
-                 - {make_edge predecessor operation_node_id ?q})
-                - {make_edge operation_node_id successor ?q})"
+          "edges ?q_circuit = insert (make_edge predecessor successor ?q) ((edges ?before_circuit - {make_edge predecessor operation_node_id ?q}) - {make_edge operation_node_id successor ?q})"
           using
             predecessor_lookup
             successor_lookup
@@ -2001,29 +1396,15 @@ proof -
           proof
 
             assume incoming_case:
-              "\<exists>selected_predecessor.
-                 predecessor_on_wire
-                   circuit operation_node_id ?q
-                   = Some selected_predecessor
-               \<and>
-                 e =
-                   make_edge
-                     selected_predecessor
-                     operation_node_id
-                     ?q"
+              "\<exists>selected_predecessor. predecessor_on_wire circuit operation_node_id ?q = Some selected_predecessor
+                 \<and> e = make_edge selected_predecessor operation_node_id ?q"
 
             then obtain selected_predecessor where
               selected_predecessor_lookup:
-                "predecessor_on_wire
-                   circuit operation_node_id ?q
-                   = Some selected_predecessor"
+                "predecessor_on_wire circuit operation_node_id ?q = Some selected_predecessor"
             and
               e_shape:
-                "e =
-                   make_edge
-                     selected_predecessor
-                     operation_node_id
-                     ?q"
+                "e = make_edge selected_predecessor operation_node_id ?q"
               by blast
 
             (* Both lookup equations return Some, so their predecessor
@@ -2036,8 +1417,7 @@ proof -
               by simp
 
             have e_is_removed_incoming:
-              "e =
-               make_edge predecessor operation_node_id ?q"
+              "e = make_edge predecessor operation_node_id ?q"
               using e_shape selected_predecessor_eq
               by simp
 
@@ -2061,29 +1441,15 @@ proof -
           next
 
             assume outgoing_case:
-              "\<exists>selected_successor.
-                 successor_on_wire
-                   circuit operation_node_id ?q
-                   = Some selected_successor
-               \<and>
-                 e =
-                   make_edge
-                     operation_node_id
-                     selected_successor
-                     ?q"
+              "\<exists>selected_successor. successor_on_wire circuit operation_node_id ?q = Some selected_successor
+                 \<and> e = make_edge operation_node_id selected_successor ?q"
 
             then obtain selected_successor where
               selected_successor_lookup:
-                "successor_on_wire
-                   circuit operation_node_id ?q
-                   = Some selected_successor"
+                "successor_on_wire circuit operation_node_id ?q = Some selected_successor"
             and
               e_shape:
-                "e =
-                   make_edge
-                     operation_node_id
-                     selected_successor
-                     ?q"
+                "e = make_edge operation_node_id selected_successor ?q"
               by blast
 
             (* Both lookup equations return Some, so their successor
@@ -2096,8 +1462,7 @@ proof -
               by simp
 
             have e_is_removed_outgoing:
-              "e =
-               make_edge operation_node_id successor ?q"
+              "e = make_edge operation_node_id successor ?q"
               using e_shape selected_successor_eq
               by simp
 
@@ -2121,30 +1486,19 @@ proof -
         qed
         
         have absent_after_later_wires:
-          "\<And>current.
-             e \<notin> edges current
-             \<Longrightarrow>
-             e \<notin>
-               edges
-                 (fold
-                   (reconnect_wire circuit operation_node_id)
-                   after
-                   current)"
-          by (metis fold_reconnect_wire_edge_cases make_edges_on_different_wires_unequal q_not_in_after
+          "\<And>current. e \<notin> edges current \<Longrightarrow> e \<notin> edges (fold (reconnect_wire circuit operation_node_id) after current)"
+          by (metis
+              fold_reconnect_wire_edge_cases
+              make_edges_on_different_wires_unequal
+              q_not_in_after
               selected_edge_cases)
-
 
         (* After the q-step, processing the remaining suffix preserves the
            absence of e. Rewriting the original fold using the before/q/after
            decomposition therefore proves that e is absent from the complete
            fold. *)
         have absent_after_suffix:
-          "e \<notin>
-           edges
-             (fold
-               (reconnect_wire circuit operation_node_id)
-               after
-               ?q_circuit)"
+          "e \<notin> edges (fold (reconnect_wire circuit operation_node_id) after ?q_circuit)"
           using absent_after_q
           by (rule absent_after_later_wires)
 
@@ -2163,28 +1517,17 @@ proof -
     next
 
       assume bypass_edge:
-        "\<exists>q \<in> set (op_qargs op).
-           \<exists>predecessor successor.
-             predecessor_on_wire
-               circuit operation_node_id q
-               = Some predecessor
-           \<and>
-             successor_on_wire
-               circuit operation_node_id q
-               = Some successor
-           \<and>
-             e = make_edge predecessor successor q"
+        "\<exists>q \<in> set (op_qargs op). \<exists>predecessor successor.
+         predecessor_on_wire circuit operation_node_id q = Some predecessor
+       \<and> successor_on_wire circuit operation_node_id q = Some successor
+       \<and> e = make_edge predecessor successor q"
 
       then obtain q predecessor successor where
         predecessor_lookup:
-          "predecessor_on_wire
-             circuit operation_node_id q
-           = Some predecessor"
+          "predecessor_on_wire circuit operation_node_id q = Some predecessor"
       and
         successor_lookup:
-          "successor_on_wire
-             circuit operation_node_id q
-           = Some successor"
+          "successor_on_wire circuit operation_node_id q = Some successor"
       and
         edge_eq:
           "e = make_edge predecessor successor q"
@@ -2200,23 +1543,20 @@ proof -
           "predecessor = operation_node_id"
 
         have self_loop:
-          "make_edge operation_node_id operation_node_id q
-           \<in> edges circuit"
+          "make_edge operation_node_id operation_node_id q \<in> edges circuit"
           using
             predecessor_on_wire_correct[OF predecessor_lookup]
             predecessor_eq
           by simp
 
         have self_relation:
-          "(operation_node_id, operation_node_id)
-           \<in> edge_relation circuit"
+          "(operation_node_id, operation_node_id) \<in> edge_relation circuit"
           using self_loop
           unfolding edge_relation_def make_edge_def
           by force
 
         have
-          "(operation_node_id, operation_node_id)
-           \<in> (edge_relation circuit)\<^sup>+"
+          "(operation_node_id, operation_node_id) \<in> (edge_relation circuit)\<^sup>+"
           using self_relation
           by (rule r_into_trancl)
 
@@ -2228,36 +1568,11 @@ proof -
 
       have successor_not_operation:
         "successor \<noteq> operation_node_id"
-      proof
-        assume successor_eq:
-          "successor = operation_node_id"
-
-        have self_loop:
-          "make_edge operation_node_id operation_node_id q
-           \<in> edges circuit"
-          using
-            successor_on_wire_correct[OF successor_lookup]
-            successor_eq
-          by simp
-
-        have self_relation:
-          "(operation_node_id, operation_node_id)
-           \<in> edge_relation circuit"
-          using self_loop
-          unfolding edge_relation_def make_edge_def
-          by force
-
-        have
-          "(operation_node_id, operation_node_id)
-           \<in> (edge_relation circuit)\<^sup>+"
-          using self_relation
-          by (rule r_into_trancl)
-
-        with original_acyclic show False
-          unfolding is_acyclic_circuit_def
-
-          by (simp add: acyclic_def)
-      qed
+        using
+          original_acyclic
+          successor_lookup
+          successor_on_wire_not_self
+        by auto
 
       (* A bypass edge connects the predecessor directly to the successor,
          neither of which is the deleted operation node. *)
@@ -2277,12 +1592,11 @@ proof -
     qed
   qed
 qed
+
 lemma delete_operation_preserves_num_qubits:
   (* Deleting an operation only modifies the graph structure. The number
      of qubits in the circuit remains unchanged. *)
-
-  shows
-    "num_qubits (delete_operation circuit node_id) = num_qubits circuit"
+  "num_qubits (delete_operation circuit node_id) = num_qubits circuit"
 
 proof (cases "nodes circuit node_id")
   case None
@@ -2295,7 +1609,6 @@ next
 
   then show ?thesis
   proof (cases node)
-
     case (InputNode q)
 
     then show ?thesis
@@ -2304,7 +1617,6 @@ next
       by simp
 
   next
-
     case (OutputNode q)
 
     then show ?thesis
@@ -2313,17 +1625,10 @@ next
       by simp
 
   next
-
     case (OperationNode op)
 
     have fold_preserves_num_qubits:
-      "num_qubits
-         (fold
-           (reconnect_wire circuit node_id)
-           (op_qargs op)
-           circuit)
-       =
-       num_qubits circuit"
+      "num_qubits (fold (reconnect_wire circuit node_id) (op_qargs op) circuit) = num_qubits circuit"
 
       by (rule fold_reconnect_wire_preserves_num_qubits)
 
@@ -2339,30 +1644,23 @@ next
 
   qed
 qed
+
 lemma reconnect_wire_preserves_next_id:
   (* Reconnecting a single wire does not allocate or remove node identifiers.
      Therefore, the next unused node identifier remains unchanged. *)
-  "next_id
-     (reconnect_wire original_circuit node_id q current_circuit)
-   =
-   next_id current_circuit"
+  "next_id (reconnect_wire original_circuit node_id q current_circuit) = next_id current_circuit"
 
   using
     delete_edge_def
     insert_edge_def
   unfolding reconnect_wire_def
   by (simp split: option.splits)
+
 lemma fold_reconnect_wire_preserves_next_id:
   (* Reconnecting every wire in a list preserves next_id.
      Each individual reconnection leaves next_id unchanged, so the entire
      fold leaves it unchanged as well. *)
-  "next_id
-     (fold
-        (reconnect_wire original_circuit node_id)
-        qs
-        current_circuit)
-   =
-   next_id current_circuit"
+  "next_id (fold (reconnect_wire original_circuit node_id) qs current_circuit) = next_id current_circuit"
 
 proof (induction qs arbitrary: current_circuit)
   case Nil
@@ -2373,33 +1671,12 @@ next
   case (Cons q qs)
 
   have first_reconnection:
-    "next_id
-       (reconnect_wire
-          original_circuit
-          node_id
-          q
-          current_circuit)
-     =
-     next_id current_circuit"
+    "next_id (reconnect_wire original_circuit node_id q current_circuit) = next_id current_circuit"
     by (rule reconnect_wire_preserves_next_id)
 
   have remaining_reconnections:
-    "next_id
-       (fold
-          (reconnect_wire original_circuit node_id)
-          qs
-          (reconnect_wire
-             original_circuit
-             node_id
-             q
-             current_circuit))
-     =
-     next_id
-       (reconnect_wire
-          original_circuit
-          node_id
-          q
-          current_circuit)"
+    "next_id (fold (reconnect_wire original_circuit node_id) qs (reconnect_wire original_circuit node_id q current_circuit))
+     = next_id (reconnect_wire original_circuit node_id q current_circuit)"
     using Cons
     by simp
 
@@ -2407,6 +1684,7 @@ next
     using first_reconnection remaining_reconnections
     by simp
 qed
+
 lemma delete_operation_preserves_next_id:
   (* Deleting an operation removes its node and reconnects its incident wires,
      but it does not reuse the deleted node identifier or allocate a new one.
@@ -2424,7 +1702,6 @@ next
 
   show ?thesis
   proof (cases node)
-
     case (InputNode q)
     then show ?thesis
       using Some
@@ -2432,7 +1709,6 @@ next
       by simp
 
   next
-
     case (OutputNode q)
     then show ?thesis
       using Some
@@ -2440,17 +1716,10 @@ next
       by simp
 
   next
-
     case (OperationNode op)
 
     have
-      "next_id
-         (fold
-            (reconnect_wire circuit node_id)
-            (op_qargs op)
-            circuit)
-       =
-       next_id circuit"
+      "next_id (fold (reconnect_wire circuit node_id) (op_qargs op) circuit) = next_id circuit"
       by (rule fold_reconnect_wire_preserves_next_id)
 
     then show ?thesis
@@ -2459,9 +1728,9 @@ next
         delete_operation_def
         Let_def
       by simp
-
   qed
 qed
+
 lemma delete_operation_preserves_boundary_nodes:
   (* Deleting an operation preserves all canonical input and output nodes.
 
@@ -2478,33 +1747,19 @@ lemma delete_operation_preserves_boundary_nodes:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   shows
-    "are_well_formed_boundary_nodes
-       (delete_operation circuit operation_node_id)"
+    "are_well_formed_boundary_nodes (delete_operation circuit operation_node_id)"
+  using
+    are_well_formed_boundary_nodes_def
+    delete_operation_nodes
+    delete_operation_preserves_num_qubits
+    is_valid_circuit_def
+    is_well_formed_circuit_def
+    operation_exists
+    valid_circuit
+  by auto
 
-proof -
-  have wf:
-    "are_well_formed_boundary_nodes circuit"
-    using
-      valid_circuit
-      is_well_formed_circuit_def
-    unfolding is_valid_circuit_def
-    by simp
-
-  show ?thesis
-    using
-      wf
-      operation_exists
-      fold_reconnect_wire_preserves_nodes
-      fold_reconnect_wire_preserves_num_qubits
-    unfolding
-      delete_operation_def
-      are_well_formed_boundary_nodes_def
-      Let_def
-    by auto
-qed
 lemma delete_operation_preserves_operation_nodes:
   (* Deleting one operation preserves the validity of every remaining
      operation node.
@@ -2522,11 +1777,9 @@ lemma delete_operation_preserves_operation_nodes:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   shows
-    "are_well_formed_operation_nodes
-       (delete_operation circuit operation_node_id)"
+    "are_well_formed_operation_nodes (delete_operation circuit operation_node_id)"
 
 proof -
   have original_operation_nodes:
@@ -2541,39 +1794,20 @@ proof -
     unfolding are_well_formed_operation_nodes_def
 
   proof (intro allI impI)
-
     fix remaining_node_id remaining_op
 
     assume remaining_node:
-      "nodes
-         (delete_operation circuit operation_node_id)
-         remaining_node_id
-       =
-       Some (OperationNode remaining_op)"
+      "nodes (delete_operation circuit operation_node_id) remaining_node_id = Some (OperationNode remaining_op)"
 
     have remaining_node_id_not_deleted:
       "remaining_node_id \<noteq> operation_node_id"
-    proof
-      assume
-        "remaining_node_id = operation_node_id"
-
-      then have
-        "nodes
-           (delete_operation circuit operation_node_id)
-           remaining_node_id
-         =
-         None"
-        using operation_exists
-              delete_operation_removes_operation_node
-        by simp
-
-      with remaining_node show False
-        by simp
-    qed
+      using
+        operation_exists
+        remaining_node
+      by auto
 
     have remaining_node_original:
-      "nodes circuit remaining_node_id =
-         Some (OperationNode remaining_op)"
+      "nodes circuit remaining_node_id = Some (OperationNode remaining_op)"
       using
         remaining_node
         remaining_node_id_not_deleted
@@ -2591,9 +1825,7 @@ proof -
       by simp
 
     show
-      "operation_in_circuit
-         (delete_operation circuit operation_node_id)
-         remaining_op"
+      "operation_in_circuit (delete_operation circuit operation_node_id) remaining_op"
       using
         operation_valid_original
         delete_operation_preserves_num_qubits
@@ -2603,6 +1835,7 @@ proof -
       by simp
   qed
 qed
+
 lemma delete_operation_edge_preserves_reachability:
   (*
     Every single directed edge remaining after deleting an operation
@@ -2622,28 +1855,21 @@ lemma delete_operation_edge_preserves_reachability:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     edge_after:
-      "(source_id, target_id)
-       \<in>
-       edge_relation
-         (delete_operation circuit operation_node_id)"
+      "(source_id, target_id) \<in> edge_relation (delete_operation circuit operation_node_id)"
   shows
-    "(source_id, target_id)
-     \<in>
-     (edge_relation circuit)\<^sup>+"
-proof -
+    "(source_id, target_id) \<in> (edge_relation circuit)\<^sup>+"
 
+proof -
   (*
     Membership in edge_relation provides a concrete wire-labelled edge
     whose source and target are source_id and target_id.
   *)
   obtain e where
     edge_in_deleted_circuit:
-      "e \<in> edges
-         (delete_operation circuit operation_node_id)"
+      "e \<in> edges (delete_operation circuit operation_node_id)"
   and
     edge_source:
       "edge_source e = source_id"
@@ -2660,12 +1886,7 @@ proof -
     folding reconnect_wire over the operation's qubit arguments.
   *)
   have edge_after_reconnection:
-    "e \<in>
-     edges
-       (fold
-         (reconnect_wire circuit operation_node_id)
-         (op_qargs op)
-         circuit)"
+    "e \<in> edges (fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit)"
     using
       edge_in_deleted_circuit
       operation_exists
@@ -2681,24 +1902,15 @@ proof -
   *)
   have edge_cases:
     "e \<in> edges circuit
-     \<or>
-     (\<exists>q \<in> set (op_qargs op).
-        \<exists>predecessor successor.
-          predecessor_on_wire
-            circuit operation_node_id q
-            = Some predecessor
-        \<and>
-          successor_on_wire
-            circuit operation_node_id q
-            = Some successor
-        \<and>
-          e = make_edge predecessor successor q)"
+     \<or> (\<exists>q \<in> set (op_qargs op). \<exists>predecessor successor.
+           predecessor_on_wire circuit operation_node_id q = Some predecessor
+         \<and> successor_on_wire circuit operation_node_id q = Some successor
+         \<and> e = make_edge predecessor successor q)"
     using edge_after_reconnection
     by (rule fold_reconnect_wire_edge_cases)
 
   from edge_cases show ?thesis
   proof
-
     assume original_edge:
       "e \<in> edges circuit"
 
@@ -2721,32 +1933,18 @@ proof -
       by (rule r_into_trancl)
 
   next
-
     assume bypass_edge:
-      "\<exists>q \<in> set (op_qargs op).
-         \<exists>predecessor successor.
-           predecessor_on_wire
-             circuit operation_node_id q
-             = Some predecessor
-         \<and>
-           successor_on_wire
-             circuit operation_node_id q
-             = Some successor
-         \<and>
-           e = make_edge predecessor successor q"
+      "\<exists>q \<in> set (op_qargs op). \<exists>predecessor successor.
+         predecessor_on_wire circuit operation_node_id q = Some predecessor
+       \<and> successor_on_wire circuit operation_node_id q = Some successor
+       \<and> e = make_edge predecessor successor q"
 
     then obtain q predecessor successor where
       predecessor:
-        "predecessor_on_wire
-           circuit operation_node_id q
-         =
-         Some predecessor"
+        "predecessor_on_wire circuit operation_node_id q = Some predecessor"
     and
       successor:
-        "successor_on_wire
-           circuit operation_node_id q
-         =
-         Some successor"
+        "successor_on_wire circuit operation_node_id q = Some successor"
     and
       bypass_edge_eq:
         "e = make_edge predecessor successor q"
@@ -2773,21 +1971,18 @@ proof -
       edges incident to operation_node_id.
     *)
     have incoming_edge:
-      "make_edge predecessor operation_node_id q
-       \<in> edges circuit"
+      "make_edge predecessor operation_node_id q \<in> edges circuit"
       using predecessor
       by (rule predecessor_on_wire_correct)
 
     have outgoing_edge:
-      "make_edge operation_node_id successor q
-       \<in> edges circuit"
+      "make_edge operation_node_id successor q \<in> edges circuit"
       using successor
       by (rule successor_on_wire_correct)
 
     (* The incoming wire-labelled edge gives the first relation step. *)
     have incoming_relation:
-      "(predecessor, operation_node_id)
-       \<in> edge_relation circuit"
+      "(predecessor, operation_node_id) \<in> edge_relation circuit"
       using incoming_edge
       unfolding
         make_edge_def
@@ -2796,8 +1991,7 @@ proof -
 
     (* The outgoing wire-labelled edge gives the second relation step. *)
     have outgoing_relation:
-      "(operation_node_id, successor)
-       \<in> edge_relation circuit"
+      "(operation_node_id, successor) \<in> edge_relation circuit"
       using outgoing_edge
       unfolding
         edge_relation_def
@@ -2810,19 +2004,11 @@ proof -
       the bypass edge.
     *)
     have bypass_reachable:
-      "(predecessor, successor)
-       \<in> (edge_relation circuit)\<^sup>+"
-    proof -
-      have
-        "(predecessor, operation_node_id)
-         \<in> (edge_relation circuit)\<^sup>+"
-        using incoming_relation
-        by (rule r_into_trancl)
-
-      then show ?thesis
-        using outgoing_relation
-        by (rule trancl_into_trancl)
-    qed
+      "(predecessor, successor) \<in> (edge_relation circuit)\<^sup>+"
+      using
+        incoming_relation
+        outgoing_relation
+      by auto
 
     show ?thesis
       using
@@ -2832,6 +2018,7 @@ proof -
       by simp
   qed
 qed
+
 lemma delete_operation_remaining_edges_not_incident:
   (*
     After deleting an operation, no remaining edge has the deleted
@@ -2851,26 +2038,19 @@ lemma delete_operation_remaining_edges_not_incident:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     remaining_edge:
-      "e \<in> edges
-         (delete_operation circuit operation_node_id)"
+      "e \<in> edges (delete_operation circuit operation_node_id)"
   shows
     "edge_source e \<noteq> operation_node_id
-     \<and> edge_target e \<noteq> operation_node_id"
+   \<and> edge_target e \<noteq> operation_node_id"
 
 proof -
   (* The final update performed by delete_operation modifies only nodes,
      so the remaining edge already exists after the reconnection fold. *)
   have edge_after_fold:
-    "e \<in>
-     edges
-       (fold
-         (reconnect_wire circuit operation_node_id)
-         (op_qargs op)
-         circuit)"
+    "e \<in> edges (fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit)"
     using
       remaining_edge
       operation_exists
@@ -2888,6 +2068,7 @@ proof -
       edge_after_fold
     by (rule fold_reconnect_wire_removes_incident_edges)
 qed
+
 lemma delete_operation_preserves_well_formed_edges:
   (* Deleting an operation preserves the well-formedness of every edge.
 
@@ -2908,12 +2089,9 @@ lemma delete_operation_preserves_well_formed_edges:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   shows
-    "are_well_formed_edges
-       (delete_operation circuit operation_node_id)"
-
+    "are_well_formed_edges (delete_operation circuit operation_node_id)"
 
 proof -
   have original_edges_well_formed:
@@ -2927,16 +2105,13 @@ proof -
   show ?thesis
     unfolding are_well_formed_edges_def
   proof (intro ballI)
-
     fix e
 
     assume edge_after:
-      "e \<in> edges
-         (delete_operation circuit operation_node_id)"
+      "e \<in> edges (delete_operation circuit operation_node_id)"
 
     have endpoints_not_deleted:
-      "edge_source e \<noteq> operation_node_id
-       \<and> edge_target e \<noteq> operation_node_id"
+      "edge_source e \<noteq> operation_node_id \<and> edge_target e \<noteq> operation_node_id"
       using
         valid_circuit
         operation_exists
@@ -2945,11 +2120,7 @@ proof -
 
     obtain reconnected_circuit where
       reconnected_circuit:
-        "reconnected_circuit =
-           fold
-             (reconnect_wire circuit operation_node_id)
-             (op_qargs op)
-             circuit"
+        "reconnected_circuit = fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit"
       by simp
 
     have edge_in_reconnected:
@@ -2964,18 +2135,10 @@ proof -
 
     have edge_origin:
       "e \<in> edges circuit
-       \<or>
-       (\<exists> q \<in> set (op_qargs op).
-          \<exists>predecessor successor.
-            predecessor_on_wire
-              circuit operation_node_id q
-              = Some predecessor
-          \<and>
-            successor_on_wire
-              circuit operation_node_id q
-              = Some successor
-          \<and>
-            e = make_edge predecessor successor q)"
+    \<or> (\<exists> q \<in> set (op_qargs op). \<exists>predecessor successor.
+         predecessor_on_wire circuit operation_node_id q = Some predecessor
+       \<and> successor_on_wire circuit operation_node_id q = Some successor
+       \<and> e = make_edge predecessor successor q)"
       using
         edge_in_reconnected
         reconnected_circuit
@@ -2988,21 +2151,14 @@ proof -
       | (bypass)
           q predecessor successor where
           "q \<in> set (op_qargs op)"
-          "predecessor_on_wire
-             circuit operation_node_id q
-             = Some predecessor"
-          "successor_on_wire
-             circuit operation_node_id q
-             = Some successor"
+          "predecessor_on_wire circuit operation_node_id q = Some predecessor"
+          "successor_on_wire circuit operation_node_id q = Some successor"
           "e = make_edge predecessor successor q"
       by auto
 
     then show
-      "is_well_formed_edge
-         (delete_operation circuit operation_node_id)
-         e"
+      "is_well_formed_edge (delete_operation circuit operation_node_id) e"
     proof cases
-
       case original
 
       have original_edge_well_formed:
@@ -3036,8 +2192,8 @@ proof -
           delete_operation_def
           Let_def
         by (simp split: option.splits)
-    next
 
+    next
       case (bypass q predecessor successor)
 
       (*
@@ -3049,15 +2205,13 @@ proof -
 
       (* The predecessor-to-operation edge exists in the original circuit. *)
       have predecessor_edge:
-        "make_edge predecessor operation_node_id q
-         \<in> edges circuit"
+        "make_edge predecessor operation_node_id q \<in> edges circuit"
         using bypass(2)
         by (rule predecessor_on_wire_correct)
 
       (* The operation-to-successor edge also exists in the original circuit. *)
       have successor_edge:
-        "make_edge operation_node_id successor q
-         \<in> edges circuit"
+        "make_edge operation_node_id successor q \<in> edges circuit"
         using bypass(3)
         by (rule successor_on_wire_correct)
 
@@ -3065,17 +2219,13 @@ proof -
          well formed. Their outer endpoints therefore exist, lie on q,
          and q is a valid circuit qubit. *)
       have predecessor_edge_well_formed:
-        "is_well_formed_edge
-           circuit
-           (make_edge predecessor operation_node_id q)"
+        "is_well_formed_edge circuit (make_edge predecessor operation_node_id q)"
         using original_edges_well_formed predecessor_edge
         unfolding are_well_formed_edges_def
         by blast
 
       have successor_edge_well_formed:
-        "is_well_formed_edge
-           circuit
-           (make_edge operation_node_id successor q)"
+        "is_well_formed_edge circuit (make_edge operation_node_id successor q)"
         using original_edges_well_formed successor_edge
         unfolding are_well_formed_edges_def
         by blast
@@ -3083,15 +2233,12 @@ proof -
       (* The bypass edge remains after deletion, so neither of its endpoints
          can be the removed operation node. *)
       have bypass_edge_after:
-        "make_edge predecessor successor q
-         \<in> edges
-             (delete_operation circuit operation_node_id)"
+        "make_edge predecessor successor q \<in> edges (delete_operation circuit operation_node_id)"
         using edge_after bypass(4)
         by simp
 
       have bypass_endpoints_not_deleted:
-        "predecessor \<noteq> operation_node_id
-         \<and> successor \<noteq> operation_node_id"
+        "predecessor \<noteq> operation_node_id \<and> successor \<noteq> operation_node_id"
         using
           delete_operation_remaining_edges_not_incident[
             OF valid_circuit operation_exists bypass_edge_after]
@@ -3128,6 +2275,7 @@ proof -
     qed
   qed
 qed
+
 lemma delete_operation_preserves_well_formed_circuit:
   (* Deleting an operation preserves the local structural validity of the
      circuit.
@@ -3152,49 +2300,18 @@ lemma delete_operation_preserves_well_formed_circuit:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   shows
-    "is_well_formed_circuit
-       (delete_operation circuit operation_node_id)"
+    "is_well_formed_circuit (delete_operation circuit operation_node_id)"
+  using
+    delete_operation_preserves_boundary_nodes
+    delete_operation_preserves_operation_nodes
+    delete_operation_preserves_well_formed_edges
+    is_well_formed_circuit_def
+    operation_exists
+    valid_circuit
+  by simp
 
-proof -
-
-  have boundary_nodes:
-    "are_well_formed_boundary_nodes
-       (delete_operation circuit operation_node_id)"
-    using
-      valid_circuit
-      operation_exists
-      delete_operation_preserves_boundary_nodes
-    by simp
-
-  have operation_nodes:
-    "are_well_formed_operation_nodes
-       (delete_operation circuit operation_node_id)"
-    using
-      valid_circuit
-      operation_exists
-      delete_operation_preserves_operation_nodes
-    by simp
-
-  have edges:
-    "are_well_formed_edges
-       (delete_operation circuit operation_node_id)"
-    using
-      valid_circuit
-      operation_exists
-      delete_operation_preserves_well_formed_edges
-    by simp
-
-  show ?thesis
-    unfolding is_well_formed_circuit_def
-    using
-      boundary_nodes
-      operation_nodes
-      edges
-    by simp
-qed
 lemma delete_operation_reachability_preserved:
   (* Every non-empty directed path that exists after deleting an operation
      corresponds to a non-empty directed path that already existed in the
@@ -3215,22 +2332,15 @@ lemma delete_operation_reachability_preserved:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   shows
-    "(edge_relation
-        (delete_operation circuit operation_node_id))\<^sup>+
-       \<subseteq>
-     (edge_relation circuit)\<^sup>+"
-proof
+    "(edge_relation (delete_operation circuit operation_node_id))\<^sup>+ \<subseteq> (edge_relation circuit)\<^sup>+"
 
+proof
   fix node_pair
 
   assume reachable_after_deletion:
-    "node_pair
-     \<in>
-     (edge_relation
-        (delete_operation circuit operation_node_id))\<^sup>+"
+    "node_pair \<in> (edge_relation (delete_operation circuit operation_node_id))\<^sup>+"
 
   (*
     Expose the source and target components of the pair so that the
@@ -3242,10 +2352,7 @@ proof
     by (cases node_pair)
 
   have source_reaches_target_after_deletion:
-    "(source_id, target_id)
-     \<in>
-     (edge_relation
-        (delete_operation circuit operation_node_id))\<^sup>+"
+    "(source_id, target_id) \<in> (edge_relation (delete_operation circuit operation_node_id))\<^sup>+"
     using reachable_after_deletion node_pair
     by simp
 
@@ -3262,12 +2369,10 @@ proof
     concatenated.
   *)
   have source_reaches_target_original:
-    "(source_id, target_id)
-     \<in>
-     (edge_relation circuit)\<^sup>+"
+    "(source_id, target_id) \<in> (edge_relation circuit)\<^sup>+"
     using source_reaches_target_after_deletion
-  proof (induction rule: trancl_induct)
 
+  proof (induction rule: trancl_induct)
     case (base intermediate_id)
 
     (*
@@ -3283,7 +2388,6 @@ proof
       by (rule delete_operation_edge_preserves_reachability)
 
   next
-
     case (step intermediate_id final_id)
 
     (*
@@ -3291,19 +2395,16 @@ proof
       fixed source to intermediate_id.
     *)
     have prefix_reachable_original:
-      "(source_id, intermediate_id)
-       \<in>
-       (edge_relation circuit)\<^sup>+"
-      using step.IH .
+      "(source_id, intermediate_id) \<in> (edge_relation circuit)\<^sup>+"
+      using step.IH
+      by simp
 
     (*
       Map the final edge of the deleted-circuit path to a non-empty path
       from intermediate_id to final_id in the original circuit.
     *)
     have final_segment_reachable_original:
-      "(intermediate_id, final_id)
-       \<in>
-       (edge_relation circuit)\<^sup>+"
+      "(intermediate_id, final_id) \<in> (edge_relation circuit)\<^sup>+"
       using
         valid_circuit
         operation_exists
@@ -3326,92 +2427,54 @@ proof
     using source_reaches_target_original node_pair
     by simp
 qed
+
 lemma reconnect_wire_successor_has_unique_predecessor:
   (* The successor of the reconnected operation retains exactly one
      predecessor on q. Its old predecessor, operation_node_id, is replaced
      by predecessor_id through the inserted bypass edge. *)
   assumes
     unique_predecessor:
-      "has_unique_wire_predecessor
-         current_circuit q successor_id"
+      "has_unique_wire_predecessor current_circuit q successor_id"
   and
     same_relation:
-      "wire_edge_relation current_circuit q =
-         wire_edge_relation original_circuit q"
+      "wire_edge_relation current_circuit q = wire_edge_relation original_circuit q"
   and
     predecessor:
-      "predecessor_on_wire
-         original_circuit operation_node_id q =
-       Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         original_circuit operation_node_id q =
-       Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   shows
-    "has_unique_wire_predecessor
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-       successor_id"
+    "has_unique_wire_predecessor (reconnect_wire original_circuit operation_node_id q current_circuit) q successor_id"
 
 proof -
-
   have old_incoming_original:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation original_circuit q"
+    "(operation_node_id, successor_id) \<in> wire_edge_relation original_circuit q"
     using successor_on_wire_correct[OF successor]
     unfolding wire_edge_relation_def
     by simp
 
   have old_incoming_current:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation current_circuit q"
+    "(operation_node_id, successor_id) \<in> wire_edge_relation current_circuit q"
     using old_incoming_original same_relation
     by simp
 
   have every_old_predecessor_is_operation:
-    "\<And>source_id.
-       (source_id, successor_id)
-         \<in> wire_edge_relation current_circuit q
-       \<Longrightarrow>
-       source_id = operation_node_id"
+    "\<And>source_id. (source_id, successor_id) \<in> wire_edge_relation current_circuit q \<Longrightarrow> source_id = operation_node_id"
     using unique_predecessor old_incoming_current
     unfolding has_unique_wire_predecessor_def
     by blast
 
   have relation_after:
-    "wire_edge_relation
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-     =
-     insert
-       (predecessor_id, successor_id)
-       (wire_edge_relation current_circuit q
-          -
-          {(predecessor_id, operation_node_id),
-           (operation_node_id, successor_id)})"
+    "wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) q
+     = insert (predecessor_id, successor_id) (wire_edge_relation current_circuit q - {(predecessor_id, operation_node_id), (operation_node_id, successor_id)})"
     using
       reconnect_wire_successor_predecessor_characterisation[
         OF predecessor successor]
-    .
+    by simp
 
   have bypass_exists:
-    "(predecessor_id, successor_id)
-       \<in> wire_edge_relation
-            (reconnect_wire
-               original_circuit
-               operation_node_id
-               q
-               current_circuit)
-            q"
+    "(predecessor_id, successor_id) \<in> wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) q"
     by (simp add: relation_after)
 
   show ?thesis
@@ -3429,86 +2492,47 @@ lemma reconnect_wire_predecessor_has_unique_successor:
      successor_id through the inserted bypass edge. *)
   assumes
     unique_successor:
-      "has_unique_wire_successor
-         current_circuit q predecessor_id"
+      "has_unique_wire_successor current_circuit q predecessor_id"
   and
     same_relation:
-      "wire_edge_relation current_circuit q =
-         wire_edge_relation original_circuit q"
+      "wire_edge_relation current_circuit q = wire_edge_relation original_circuit q"
   and
     predecessor:
-      "predecessor_on_wire
-         original_circuit operation_node_id q =
-       Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         original_circuit operation_node_id q =
-       Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   shows
-    "has_unique_wire_successor
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-       predecessor_id"
+    "has_unique_wire_successor (reconnect_wire original_circuit operation_node_id q current_circuit) q predecessor_id"
 
 proof -
-
   have old_outgoing_original:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation original_circuit q"
+    "(predecessor_id, operation_node_id) \<in> wire_edge_relation original_circuit q"
     using predecessor_on_wire_correct[OF predecessor]
     unfolding wire_edge_relation_def
     by simp
 
   have old_outgoing_current:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation current_circuit q"
+    "(predecessor_id, operation_node_id) \<in> wire_edge_relation current_circuit q"
     using old_outgoing_original same_relation
     by simp
 
   have every_old_successor_is_operation:
-    "\<And>target_id.
-       (predecessor_id, target_id)
-         \<in> wire_edge_relation current_circuit q
-       \<Longrightarrow>
-       target_id = operation_node_id"
+    "\<And>target_id. (predecessor_id, target_id) \<in> wire_edge_relation current_circuit q \<Longrightarrow> target_id = operation_node_id"
     using unique_successor old_outgoing_current
     unfolding has_unique_wire_successor_def
     by blast
 
   have relation_after:
-    "wire_edge_relation
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-     =
-     insert
-       (predecessor_id, successor_id)
-       (wire_edge_relation current_circuit q
-          -
-          {(predecessor_id, operation_node_id),
-           (operation_node_id, successor_id)})"
+    "wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) q
+      = insert (predecessor_id, successor_id) (wire_edge_relation current_circuit q - {(predecessor_id, operation_node_id), (operation_node_id, successor_id)})"
     using
       reconnect_wire_successor_predecessor_characterisation[
         OF predecessor successor]
-    .
+    by simp
 
   have bypass_exists:
-    "(predecessor_id, successor_id)
-       \<in> wire_edge_relation
-            (reconnect_wire
-               original_circuit
-               operation_node_id
-               q
-               current_circuit)
-            q"
+    "(predecessor_id, successor_id) \<in> wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) q"
     by (simp add: relation_after)
 
   show ?thesis
@@ -3518,24 +2542,20 @@ proof -
       relation_after
     by auto
 qed
+
 lemma reconnect_wire_other_node_has_unique_predecessor:
   (* A node that is neither the deleted operation nor its successor keeps
      exactly the same incoming q-edges after reconnection. Therefore, its
      unique-predecessor property is preserved. *)
   assumes
     unique_predecessor:
-      "has_unique_wire_predecessor
-         current_circuit q node_id"
+      "has_unique_wire_predecessor current_circuit q node_id"
   and
     predecessor:
-      "predecessor_on_wire
-         original_circuit operation_node_id q =
-       Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         original_circuit operation_node_id q =
-       Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   and
     not_deleted:
       "node_id \<noteq> operation_node_id"
@@ -3543,81 +2563,44 @@ lemma reconnect_wire_other_node_has_unique_predecessor:
     not_successor:
       "node_id \<noteq> successor_id"
   shows
-    "has_unique_wire_predecessor
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-       node_id"
+    "has_unique_wire_predecessor (reconnect_wire original_circuit operation_node_id q current_circuit) q node_id"
 
 proof -
   let ?updated_circuit =
-    "reconnect_wire
-       original_circuit
-       operation_node_id
-       q
-       current_circuit"
+    "reconnect_wire original_circuit operation_node_id q current_circuit"
 
   have relation_after:
-    "wire_edge_relation ?updated_circuit q =
-       insert
-         (predecessor_id, successor_id)
-         (wire_edge_relation current_circuit q
-            -
-            {(predecessor_id, operation_node_id),
-             (operation_node_id, successor_id)})"
+    "wire_edge_relation ?updated_circuit q
+     = insert (predecessor_id, successor_id) (wire_edge_relation current_circuit q - {(predecessor_id, operation_node_id), (operation_node_id, successor_id)})"
     using
       reconnect_wire_successor_predecessor_characterisation[
         OF predecessor successor]
-    .
+    by simp
 
   have incoming_relation_iff:
-    "\<And>source_id.
-       (source_id, node_id)
-         \<in> wire_edge_relation ?updated_circuit q
-       \<longleftrightarrow>
-       (source_id, node_id)
-         \<in> wire_edge_relation current_circuit q"
-  proof -
-    fix source_id
-
-    show
-      "(source_id, node_id)
-         \<in> wire_edge_relation ?updated_circuit q
-       \<longleftrightarrow>
-       (source_id, node_id)
-         \<in> wire_edge_relation current_circuit q"
-      using
-        relation_after
-        not_deleted
-        not_successor
-      by auto
-  qed
+    "\<And>source_id. 
+      (source_id, node_id) \<in> wire_edge_relation ?updated_circuit q
+     \<longleftrightarrow> (source_id, node_id) \<in> wire_edge_relation current_circuit q"
+    using not_deleted not_successor relation_after by auto
 
   show ?thesis
     using has_unique_wire_predecessor_def incoming_relation_iff unique_predecessor
-    by fastforce
+    by simp
 qed
+
 lemma reconnect_wire_other_node_has_unique_successor:
   (* A node that is neither the deleted operation nor its predecessor keeps
      exactly the same outgoing q-edges after reconnection. Therefore, its
      unique-successor property is preserved. *)
   assumes
     unique_successor:
-      "has_unique_wire_successor
-         current_circuit q node_id"
+      "has_unique_wire_successor current_circuit q node_id"
   and
     predecessor:
-      "predecessor_on_wire
-         original_circuit operation_node_id q =
-       Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         original_circuit operation_node_id q =
-       Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   and
     not_deleted:
       "node_id \<noteq> operation_node_id"
@@ -3625,77 +2608,40 @@ lemma reconnect_wire_other_node_has_unique_successor:
     not_predecessor:
       "node_id \<noteq> predecessor_id"
   shows
-    "has_unique_wire_successor
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-       node_id"
+    "has_unique_wire_successor (reconnect_wire original_circuit operation_node_id q current_circuit) q node_id"
 
 proof -
-
-  let ?updated_circuit =
-    "reconnect_wire
-       original_circuit
-       operation_node_id
-       q
-       current_circuit"
+  let ?updated_circuit = "reconnect_wire original_circuit operation_node_id q current_circuit"
 
   have relation_after:
-    "wire_edge_relation ?updated_circuit q =
-       insert
-         (predecessor_id, successor_id)
-         (wire_edge_relation current_circuit q
-            -
-            {(predecessor_id, operation_node_id),
-             (operation_node_id, successor_id)})"
+    "wire_edge_relation ?updated_circuit q
+       = insert (predecessor_id, successor_id) (wire_edge_relation current_circuit q - {(predecessor_id, operation_node_id), (operation_node_id, successor_id)})"
     using
       reconnect_wire_successor_predecessor_characterisation[
         OF predecessor successor]
-    .
+    by simp
 
   have outgoing_relation_iff:
     "\<And>target_id.
-       (node_id, target_id)
-         \<in> wire_edge_relation ?updated_circuit q
-       \<longleftrightarrow>
-       (node_id, target_id)
-         \<in> wire_edge_relation current_circuit q"
-  proof -
-    fix target_id
-
-    show
-      "(node_id, target_id)
-         \<in> wire_edge_relation ?updated_circuit q
-       \<longleftrightarrow>
-       (node_id, target_id)
-         \<in> wire_edge_relation current_circuit q"
-      using
-        relation_after
-        not_deleted
-        not_predecessor
-      by auto
-  qed
+       (node_id, target_id) \<in> wire_edge_relation ?updated_circuit q
+   \<longleftrightarrow> (node_id, target_id) \<in> wire_edge_relation current_circuit q"
+    using
+      not_deleted
+      not_predecessor
+      relation_after
+    by auto
 
   have old_exists:
-    "\<exists>target_id.
-       (node_id, target_id)
-         \<in> wire_edge_relation current_circuit q"
+    "\<exists>target_id. (node_id, target_id) \<in> wire_edge_relation current_circuit q"
     using unique_successor
     unfolding has_unique_wire_successor_def
     by blast
 
   have old_unique:
     "\<And>target_id target_id'.
-       (node_id, target_id)
-         \<in> wire_edge_relation current_circuit q
-       \<Longrightarrow>
-       (node_id, target_id')
-         \<in> wire_edge_relation current_circuit q
-       \<Longrightarrow>
-       target_id = target_id'"
+       (node_id, target_id) \<in> wire_edge_relation current_circuit q \<Longrightarrow>
+         (node_id, target_id') \<in> wire_edge_relation current_circuit q \<Longrightarrow>
+           target_id = target_id'"
     using unique_successor
     unfolding has_unique_wire_successor_def
     by blast
@@ -3708,6 +2654,7 @@ proof -
       outgoing_relation_iff
     by auto
 qed
+
 lemma reconnect_wire_preserves_remaining_node_degrees:
   (* Reconnecting predecessor -> operation -> successor preserves the unique
      predecessor and successor properties of every node other than the
@@ -3726,18 +2673,13 @@ lemma reconnect_wire_preserves_remaining_node_degrees:
       "has_unique_wire_successor current_circuit q node_id"
   and
     same_relation:
-      "wire_edge_relation current_circuit q =
-       wire_edge_relation original_circuit q"
+      "wire_edge_relation current_circuit q = wire_edge_relation original_circuit q"
   and
     predecessor:
-      "predecessor_on_wire
-         original_circuit operation_node_id q =
-       Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         original_circuit operation_node_id q =
-       Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   and
     remaining_node:
       "node_id \<noteq> operation_node_id"
@@ -3751,15 +2693,8 @@ lemma reconnect_wire_preserves_remaining_node_degrees:
     predecessor_not_successor:
       "predecessor_id \<noteq> successor_id"
   shows
-    "has_unique_wire_predecessor
-       (reconnect_wire
-          original_circuit operation_node_id q current_circuit)
-       q node_id
-     \<and>
-     has_unique_wire_successor
-       (reconnect_wire
-          original_circuit operation_node_id q current_circuit)
-       q node_id"
+    "has_unique_wire_predecessor (reconnect_wire original_circuit operation_node_id q current_circuit) q node_id
+     \<and> has_unique_wire_successor (reconnect_wire original_circuit operation_node_id q current_circuit) q node_id"
   by (metis
       predecessor
       reconnect_wire_other_node_has_unique_predecessor
@@ -3787,14 +2722,10 @@ lemma fold_reconnect_preserves_operation_degrees:
       "has_unique_wire_successor circuit q node_id"
   and
     predecessor:
-      "predecessor_on_wire
-         circuit operation_node_id q =
-       Some predecessor_id"
+      "predecessor_on_wire circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         circuit operation_node_id q =
-       Some successor_id"
+      "successor_on_wire circuit operation_node_id q = Some successor_id"
   and
     remaining_node:
       "node_id \<noteq> operation_node_id"
@@ -3814,21 +2745,8 @@ lemma fold_reconnect_preserves_operation_degrees:
     used_wire:
       "q \<in> set qs"
   shows
-    "has_unique_wire_predecessor
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          qs
-          circuit)
-       q
-       node_id
-     \<and>
-     has_unique_wire_successor
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          qs
-          circuit)
-       q
-       node_id"
+    "has_unique_wire_predecessor (fold (reconnect_wire circuit operation_node_id) qs circuit) q node_id
+   \<and> has_unique_wire_successor (fold (reconnect_wire circuit operation_node_id) qs circuit) q node_id"
 
 proof -
   obtain before after where
@@ -3847,47 +2765,32 @@ proof -
     using distinct_wires qs_decomposition
     by auto
 
-  let ?before_circuit =
-    "fold
-       (reconnect_wire circuit operation_node_id)
-       before
-       circuit"
+  let ?before_circuit = "fold (reconnect_wire circuit operation_node_id) before circuit"
 
-  let ?q_circuit =
-    "reconnect_wire
-       circuit
-       operation_node_id
-       q
-       ?before_circuit"
+  let ?q_circuit = "reconnect_wire circuit operation_node_id q ?before_circuit"
 
   have before_same_relation:
-    "wire_edge_relation ?before_circuit q =
-       wire_edge_relation circuit q"
+    "wire_edge_relation ?before_circuit q = wire_edge_relation circuit q"
     using
       fold_reconnect_preserves_other_wire_relation
       q_not_in_before
     by simp
 
   have predecessor_before:
-    "has_unique_wire_predecessor
-       ?before_circuit q node_id"
+    "has_unique_wire_predecessor ?before_circuit q node_id"
     using unique_predecessor before_same_relation
     unfolding has_unique_wire_predecessor_def
     by auto
 
   have successor_before:
-    "has_unique_wire_successor
-       ?before_circuit q node_id"
+    "has_unique_wire_successor ?before_circuit q node_id"
     using unique_successor before_same_relation
     unfolding has_unique_wire_successor_def
     by simp
 
   have degrees_after_q:
-    "has_unique_wire_predecessor
-       ?q_circuit q node_id
-     \<and>
-     has_unique_wire_successor
-       ?q_circuit q node_id"
+    "has_unique_wire_predecessor ?q_circuit q node_id
+   \<and> has_unique_wire_successor ?q_circuit q node_id"
     using
       before_same_relation
       predecessor
@@ -3902,27 +2805,15 @@ proof -
     by simp
     
   have after_same_relation:
-    "wire_edge_relation
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          after
-          ?q_circuit)
-       q
-     =
-     wire_edge_relation ?q_circuit q"
+    "wire_edge_relation (fold (reconnect_wire circuit operation_node_id) after ?q_circuit) q
+   = wire_edge_relation ?q_circuit q"
     using
       fold_reconnect_preserves_other_wire_relation
       q_not_in_after
     by simp
     
   have predecessor_after:
-    "has_unique_wire_predecessor
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          after
-          ?q_circuit)
-       q
-       node_id"
+    "has_unique_wire_predecessor (fold (reconnect_wire circuit operation_node_id) after ?q_circuit) q node_id"
     using
       degrees_after_q
       after_same_relation
@@ -3930,13 +2821,7 @@ proof -
     by simp
 
   have successor_after:
-    "has_unique_wire_successor
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          after
-          ?q_circuit)
-       q
-       node_id"
+    "has_unique_wire_successor (fold (reconnect_wire circuit operation_node_id) after ?q_circuit) q node_id"
     using degrees_after_q after_same_relation
     unfolding has_unique_wire_successor_def
     by auto
@@ -3947,8 +2832,8 @@ proof -
       successor_after
       qs_decomposition
     by simp
-
 qed
+
 lemma delete_operation_preserves_acyclicity:
   (* Deleting an operation from a valid quantum circuit preserves
      acyclicity.
@@ -3967,61 +2852,17 @@ lemma delete_operation_preserves_acyclicity:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   shows
-    "is_acyclic_circuit
-       (delete_operation circuit operation_node_id)"
+    "is_acyclic_circuit (delete_operation circuit operation_node_id)"
+  by (meson
+      acyclic_def
+      delete_operation_reachability_preserved
+      is_acyclic_circuit_def
+      is_valid_circuit_def
+      operation_exists
+      subset_iff valid_circuit)
 
-proof -
-
-  have original_acyclic:
-    "acyclic (edge_relation circuit)"
-    using valid_circuit
-    unfolding is_valid_circuit_def
-              is_acyclic_circuit_def
-    by simp
-
-  have reachability_preserved:
-    "(edge_relation
-        (delete_operation circuit operation_node_id))\<^sup>+
-       \<subseteq>
-     (edge_relation circuit)\<^sup>+"
-    using valid_circuit operation_exists
-    by (rule delete_operation_reachability_preserved)
-
-  show ?thesis
-    unfolding is_acyclic_circuit_def acyclic_def
-  proof
-    fix node_id
-
-    show
-      "(node_id, node_id)
-         \<notin> (edge_relation
-              (delete_operation circuit operation_node_id))\<^sup>+"
-    proof
-      assume cycle_after_deletion:
-        "(node_id, node_id)
-           \<in> (edge_relation
-                (delete_operation circuit operation_node_id))\<^sup>+"
-
-      then have cycle_before_deletion:
-        "(node_id, node_id) \<in> (edge_relation circuit)\<^sup>+"
-        using reachability_preserved
-        by auto
-
-      moreover have
-        "(node_id, node_id) \<notin> (edge_relation circuit)\<^sup>+"
-        using original_acyclic
-        unfolding acyclic_def
-        by simp
-
-      ultimately show False
-        by simp
-    qed
-  qed
-
-qed
 lemma delete_operation_preserves_unused_wire_relation:
   (* If the deleted operation does not use q, delete_operation never invokes
      reconnect_wire on q.
@@ -4032,28 +2873,17 @@ lemma delete_operation_preserves_unused_wire_relation:
   *)
   assumes
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     unused_wire:
       "q \<notin> set (op_qargs op)"
   shows
-    "wire_edge_relation
-       (delete_operation circuit operation_node_id)
-       q
-     =
-     wire_edge_relation circuit q"
+    "wire_edge_relation (delete_operation circuit operation_node_id) q = wire_edge_relation circuit q"
 
 proof -
   have folded_relation:
-    "wire_edge_relation
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          (op_qargs op)
-          circuit)
-       q
-     =
-     wire_edge_relation circuit q"
+    "wire_edge_relation (fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit) q
+   = wire_edge_relation circuit q"
     using unused_wire
     by (rule fold_reconnect_preserves_other_wire_relation)
 
@@ -4067,6 +2897,7 @@ proof -
       Let_def
     by simp
 qed
+
 lemma delete_operation_preserves_linear_unused_wire:
   (* If the deleted operation does not use q, deletion does not modify
      the q-labelled edge relation.
@@ -4087,28 +2918,21 @@ lemma delete_operation_preserves_linear_unused_wire:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     unused_wire:
       "q \<notin> set (op_qargs op)"
   shows
-    "wire_is_linear circuit q
-     \<Longrightarrow>
-     wire_is_linear
-       (delete_operation circuit operation_node_id)
-       q"
+    "wire_is_linear circuit q \<Longrightarrow> wire_is_linear (delete_operation circuit operation_node_id) q"
 
 proof -
   assume original_linear:
     "wire_is_linear circuit q"
 
-  let ?deleted =
-    "delete_operation circuit operation_node_id"
+  let ?deleted = "delete_operation circuit operation_node_id"
 
   have same_wire_relation:
-    "wire_edge_relation ?deleted q =
-     wire_edge_relation circuit q"
+    "wire_edge_relation ?deleted q = wire_edge_relation circuit q"
     using operation_exists unused_wire
     by (rule delete_operation_preserves_unused_wire_relation)
 
@@ -4118,205 +2942,41 @@ proof -
     by simp
 
   have remaining_node_origin:
-    "\<And>node_id node_value.
-       nodes ?deleted node_id = Some node_value
-       \<Longrightarrow>
-       nodes circuit node_id = Some node_value"
-  proof -
-    fix node_id node_value
-
-    assume node_after:
-      "nodes ?deleted node_id = Some node_value"
-
-    have node_id_not_deleted:
-      "node_id \<noteq> operation_node_id"
-    proof
-      assume
-        "node_id = operation_node_id"
-
-      then have
-        "nodes ?deleted node_id = None"
-        using operation_exists
-        by simp
-
-      with node_after show False
-        by simp
-    qed
-
-    show
-      "nodes circuit node_id = Some node_value"
-      using
-        node_after
-        node_id_not_deleted
-        operation_exists
-        fold_reconnect_wire_preserves_nodes
-      unfolding
-        delete_operation_def
-        Let_def
-      by simp
-
-  qed
+    "\<And>node_id node_value. nodes ?deleted node_id = Some node_value
+         \<Longrightarrow> nodes circuit node_id = Some node_value"
+    by (metis delete_operation_nodes fun_upd_apply operation_exists option.distinct(1))
 
   have original_q_node_survives:
-    "\<And>node_id node_value.
-       nodes circuit node_id = Some node_value
-       \<Longrightarrow>
-       node_uses_qubit node_value q
-       \<Longrightarrow>
-       nodes ?deleted node_id = Some node_value"
-  proof -
-
-    fix node_id node_value
-
-    assume node_before:
-      "nodes circuit node_id = Some node_value"
-
-    assume uses_q:
-      "node_uses_qubit node_value q"
-
-    have node_id_not_deleted:
-      "node_id \<noteq> operation_node_id"
-    proof
-      assume same_id:
-        "node_id = operation_node_id"
-
-      from node_before operation_exists same_id
-      have
-        "node_value = OperationNode op"
-        by simp
-
-      then have
-        "node_uses_qubit (OperationNode op) q"
-        using uses_q
-        by simp
-
-      with deleted_node_does_not_use_q
-      show False
-        by simp
-    qed
-
-    show
-      "nodes ?deleted node_id = Some node_value"
-      using
-        node_before
-        node_id_not_deleted
-        operation_exists
-        fold_reconnect_wire_preserves_nodes
-      unfolding
-        delete_operation_def
-        Let_def
-      by simp
-
-  qed
+    "\<And>node_id node_value. nodes circuit node_id = Some node_value
+     \<Longrightarrow> node_uses_qubit node_value q
+     \<Longrightarrow> nodes ?deleted node_id = Some node_value"
+    using delete_operation_nodes deleted_node_does_not_use_q operation_exists by force
 
   have comparable_after:
     "nodes_comparable_on_wire ?deleted q"
-  proof -
-    have comparable_before:
-      "nodes_comparable_on_wire circuit q"
-      using original_linear
-      unfolding wire_is_linear_def
-      by simp
-
-    show ?thesis
-      unfolding nodes_comparable_on_wire_def
-
-    proof (intro allI impI)
-
-      fix node_a node_b node_a_value node_b_value
-
-      assume node_a_after:
-        "nodes ?deleted node_a = Some node_a_value"
-
-      assume node_b_after:
-        "nodes ?deleted node_b = Some node_b_value"
-
-      assume node_a_uses_q:
-        "node_uses_qubit node_a_value q"
-
-      assume node_b_uses_q:
-        "node_uses_qubit node_b_value q"
-
-      have node_a_before:
-        "nodes circuit node_a = Some node_a_value"
-        using node_a_after
-        by (rule remaining_node_origin)
-
-      have node_b_before:
-        "nodes circuit node_b = Some node_b_value"
-        using node_b_after
-        by (rule remaining_node_origin)
-
-      have original_comparison:
-        "node_a = node_b
-         \<or> wire_reaches circuit q node_a node_b
-         \<or> wire_reaches circuit q node_b node_a"
-        using
-          comparable_before
-          node_a_before
-          node_b_before
-          node_a_uses_q
-          node_b_uses_q
-        unfolding nodes_comparable_on_wire_def
-        by blast
-
-      show
-        "node_a = node_b
-         \<or> wire_reaches ?deleted q node_a node_b
-         \<or> wire_reaches ?deleted q node_b node_a"
-        using original_comparison same_wire_relation
-        unfolding wire_reaches_def
-        by simp
-
-    qed
-
-  qed
+    using
+      delete_operation_nodes
+      nodes_comparable_on_wire_def
+      operation_exists
+      original_linear
+      same_wire_relation
+      wire_is_linear_def
+      wire_reaches_def
+    by auto
 
   have operation_nodes_after:
     "\<forall>node_id remaining_op.
        nodes ?deleted node_id = Some (OperationNode remaining_op)
-       \<longrightarrow>
-       node_uses_qubit (OperationNode remaining_op) q
-       \<longrightarrow>
-       has_unique_wire_predecessor ?deleted q node_id
-       \<and>
-       has_unique_wire_successor ?deleted q node_id"
-  proof (intro allI impI)
-
-    fix node_id remaining_op
-
-    assume node_after:
-      "nodes ?deleted node_id =
-         Some (OperationNode remaining_op)"
-
-    assume uses_q:
-      "node_uses_qubit (OperationNode remaining_op) q"
-
-    have node_before:
-      "nodes circuit node_id =
-         Some (OperationNode remaining_op)"
-      using node_after
-      by (rule remaining_node_origin)
-
-    have original_operation_condition:
-      "has_unique_wire_predecessor circuit q node_id
-       \<and>
-       has_unique_wire_successor circuit q node_id"
-      using original_linear node_before uses_q
-      unfolding wire_is_linear_def
-      by blast
-
-    show
-      "has_unique_wire_predecessor ?deleted q node_id
-       \<and>
-       has_unique_wire_successor ?deleted q node_id"
-      using original_operation_condition same_wire_relation
-      unfolding
+   \<longrightarrow> node_uses_qubit (OperationNode remaining_op) q
+   \<longrightarrow> has_unique_wire_predecessor ?deleted q node_id
+       \<and> has_unique_wire_successor ?deleted q node_id"
+    by (metis
         has_unique_wire_predecessor_def
         has_unique_wire_successor_def
-      by simp
-
-  qed
+        original_linear
+        remaining_node_origin
+        same_wire_relation
+        wire_is_linear_def)
 
   show
     "wire_is_linear ?deleted q"
@@ -4331,6 +2991,7 @@ proof -
       has_unique_wire_successor_def
     by simp
 qed
+
 lemma reconnect_wire_preserves_surviving_reachability:
   (* Contracting
 
@@ -4350,26 +3011,19 @@ lemma reconnect_wire_preserves_surviving_reachability:
   *)
   assumes
     same_relation:
-      "wire_edge_relation current_circuit q =
-       wire_edge_relation original_circuit q"
+      "wire_edge_relation current_circuit q = wire_edge_relation original_circuit q"
   and
     unique_operation_predecessor:
-      "has_unique_wire_predecessor
-         current_circuit q operation_node_id"
+      "has_unique_wire_predecessor current_circuit q operation_node_id"
   and
     unique_operation_successor:
-      "has_unique_wire_successor
-         current_circuit q operation_node_id"
+      "has_unique_wire_successor current_circuit q operation_node_id"
   and
     predecessor:
-      "predecessor_on_wire
-         original_circuit operation_node_id q =
-       Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         original_circuit operation_node_id q =
-       Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   and
     old_reachability:
       "wire_reaches current_circuit q node_a node_b"
@@ -4380,61 +3034,37 @@ lemma reconnect_wire_preserves_surviving_reachability:
     target_survives:
       "node_b \<noteq> operation_node_id"
   shows
-    "wire_reaches
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-       node_a
-       node_b"
+    "wire_reaches (reconnect_wire original_circuit operation_node_id q current_circuit) q node_a node_b"
 
 proof -
+  let ?old_relation = "wire_edge_relation current_circuit q"
 
-  let ?old_relation =
-    "wire_edge_relation current_circuit q"
-
-  let ?new_relation =
-    "wire_edge_relation
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q"
+  let ?new_relation = "wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) q"
 
   have predecessor_edge_original:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation original_circuit q"
+    "(predecessor_id, operation_node_id) \<in> wire_edge_relation original_circuit q"
     using predecessor_on_wire_correct[OF predecessor]
     unfolding wire_edge_relation_def
     by simp
 
   have predecessor_edge_current:
-    "(predecessor_id, operation_node_id)
-       \<in> ?old_relation"
+    "(predecessor_id, operation_node_id) \<in> ?old_relation"
     using predecessor_edge_original same_relation
     by simp
 
   have successor_edge_original:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation original_circuit q"
+    "(operation_node_id, successor_id) \<in> wire_edge_relation original_circuit q"
     using successor_on_wire_correct[OF successor]
     unfolding wire_edge_relation_def
     by simp
 
   have successor_edge_current:
-    "(operation_node_id, successor_id)
-       \<in> ?old_relation"
+    "(operation_node_id, successor_id) \<in> ?old_relation"
     using successor_edge_original same_relation
     by simp
 
   have every_operation_predecessor:
-    "\<And>source_id.
-       (source_id, operation_node_id) \<in> ?old_relation
-       \<Longrightarrow>
-       source_id = predecessor_id"
+    "\<And>source_id. (source_id, operation_node_id) \<in> ?old_relation \<Longrightarrow> source_id = predecessor_id"
     using
       unique_operation_predecessor
       predecessor_edge_current
@@ -4442,10 +3072,7 @@ proof -
     by blast
 
   have every_operation_successor:
-    "\<And>target_id.
-       (operation_node_id, target_id) \<in> ?old_relation
-       \<Longrightarrow>
-       target_id = successor_id"
+    "\<And>target_id. (operation_node_id, target_id) \<in> ?old_relation \<Longrightarrow> target_id = successor_id"
     using
       unique_operation_successor
       successor_edge_current
@@ -4453,13 +3080,7 @@ proof -
     by blast
 
   have relation_after:
-    "?new_relation =
-       insert
-         (predecessor_id, successor_id)
-         (?old_relation
-            -
-            {(predecessor_id, operation_node_id),
-             (operation_node_id, successor_id)})"
+    "?new_relation = insert (predecessor_id, successor_id) (?old_relation - {(predecessor_id, operation_node_id), (operation_node_id, successor_id)})"
     using
       reconnect_wire_successor_predecessor_characterisation[
         OF predecessor successor]
@@ -4471,14 +3092,7 @@ proof -
     by simp
 
   have surviving_edge_preserved:
-    "\<And>source_id target_id.
-       (source_id, target_id) \<in> ?old_relation
-       \<Longrightarrow>
-       source_id \<noteq> operation_node_id
-       \<Longrightarrow>
-       target_id \<noteq> operation_node_id
-       \<Longrightarrow>
-       (source_id, target_id) \<in> ?new_relation"
+    "\<And>source_id target_id. (source_id, target_id) \<in> ?old_relation \<Longrightarrow> source_id \<noteq> operation_node_id \<Longrightarrow> target_id \<noteq> operation_node_id \<Longrightarrow> (source_id, target_id) \<in> ?new_relation"
     using relation_after
     by auto
 
@@ -4486,42 +3100,27 @@ proof -
     "(node_a, node_b) \<in> ?old_relation\<^sup>+"
     using old_reachability
     unfolding wire_reaches_def
-    .
+    by simp
 
   have strengthened_path:
     "\<And>target_id.
-       (node_a, target_id) \<in> ?old_relation\<^sup>+
-       \<Longrightarrow>
-       (target_id = operation_node_id
-        \<longrightarrow>
-          node_a = predecessor_id
-          \<or>
-          (node_a, predecessor_id) \<in> ?new_relation\<^sup>+)
-       \<and>
-       (target_id \<noteq> operation_node_id
-        \<longrightarrow>
-          (node_a, target_id) \<in> ?new_relation\<^sup>+)"
+       (node_a, target_id) \<in> ?old_relation\<^sup>+ \<Longrightarrow> 
+          (target_id = operation_node_id \<longrightarrow>
+                 node_a = predecessor_id \<or> (node_a, predecessor_id) \<in> ?new_relation\<^sup>+)
+         \<and> (target_id \<noteq> operation_node_id \<longrightarrow> (node_a, target_id) \<in> ?new_relation\<^sup>+)"
   proof -
-
     fix target_id
 
     assume old_target_path:
       "(node_a, target_id) \<in> ?old_relation\<^sup>+"
 
     show
-      "(target_id = operation_node_id
-        \<longrightarrow>
-          node_a = predecessor_id
-          \<or>
-          (node_a, predecessor_id) \<in> ?new_relation\<^sup>+)
-       \<and>
-       (target_id \<noteq> operation_node_id
-        \<longrightarrow>
-          (node_a, target_id) \<in> ?new_relation\<^sup>+)"
+      "(target_id = operation_node_id \<longrightarrow> 
+            node_a = predecessor_id \<or> (node_a, predecessor_id) \<in> ?new_relation\<^sup>+)
+     \<and> (target_id \<noteq> operation_node_id \<longrightarrow> (node_a, target_id) \<in> ?new_relation\<^sup>+)"
 
       using old_target_path
     proof (induction rule: trancl_induct)
-
       case (base target_id)
       
       show ?case
@@ -4533,7 +3132,6 @@ proof -
         by auto
 
     next
-
       case (step middle_id target_id)
 
       show ?case
@@ -4558,8 +3156,9 @@ proof -
   show ?thesis
     using new_path
     unfolding wire_reaches_def
-    .
+    by simp
 qed
+
 lemma fold_reconnect_preserves_surviving_reachability:
   (* In a distinct list of affected wires containing q, reconnections on
      wires other than q leave q's relation unchanged. The single
@@ -4568,22 +3167,16 @@ lemma fold_reconnect_preserves_surviving_reachability:
   *)
   assumes
     unique_operation_predecessor:
-      "has_unique_wire_predecessor
-         circuit q operation_node_id"
+      "has_unique_wire_predecessor circuit q operation_node_id"
   and
     unique_operation_successor:
-      "has_unique_wire_successor
-         circuit q operation_node_id"
+      "has_unique_wire_successor circuit q operation_node_id"
   and
     predecessor:
-      "predecessor_on_wire
-         circuit operation_node_id q =
-       Some predecessor_id"
+      "predecessor_on_wire circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         circuit operation_node_id q =
-       Some successor_id"
+      "successor_on_wire circuit operation_node_id q = Some successor_id"
   and
     old_reachability:
       "wire_reaches circuit q node_a node_b"
@@ -4600,14 +3193,7 @@ lemma fold_reconnect_preserves_surviving_reachability:
     used_wire:
       "q \<in> set qs"
   shows
-    "wire_reaches
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          qs
-          circuit)
-       q
-       node_a
-       node_b"
+    "wire_reaches (fold (reconnect_wire circuit operation_node_id) qs circuit) q node_a node_b"
 
 proof -
   obtain before after where
@@ -4626,30 +3212,19 @@ proof -
     using distinct_wires qs_decomposition
     by auto
 
-  let ?before_circuit =
-    "fold
-       (reconnect_wire circuit operation_node_id)
-       before
-       circuit"
+  let ?before_circuit = "fold (reconnect_wire circuit operation_node_id) before circuit"
 
-  let ?q_circuit =
-    "reconnect_wire
-       circuit
-       operation_node_id
-       q
-       ?before_circuit"
+  let ?q_circuit = "reconnect_wire circuit operation_node_id q ?before_circuit"
 
   have before_same_relation:
-    "wire_edge_relation ?before_circuit q =
-       wire_edge_relation circuit q"
+    "wire_edge_relation ?before_circuit q = wire_edge_relation circuit q"
     using
       fold_reconnect_preserves_other_wire_relation
       q_not_in_before
     by simp
 
   have predecessor_before:
-    "has_unique_wire_predecessor
-       ?before_circuit q operation_node_id"
+    "has_unique_wire_predecessor ?before_circuit q operation_node_id"
     using
       unique_operation_predecessor
       before_same_relation
@@ -4657,8 +3232,7 @@ proof -
     by auto
 
   have successor_before:
-    "has_unique_wire_successor
-       ?before_circuit q operation_node_id"
+    "has_unique_wire_successor ?before_circuit q operation_node_id"
     using
       unique_operation_successor
       before_same_relation
@@ -4688,28 +3262,14 @@ proof -
     by simp
 
   have after_same_relation:
-    "wire_edge_relation
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          after
-          ?q_circuit)
-       q
-     =
-     wire_edge_relation ?q_circuit q"
+    "wire_edge_relation (fold (reconnect_wire circuit operation_node_id) after ?q_circuit) q = wire_edge_relation ?q_circuit q"
     using
       fold_reconnect_preserves_other_wire_relation
       q_not_in_after
     by simp
 
   have reachability_after:
-    "wire_reaches
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          after
-          ?q_circuit)
-       q
-       node_a
-       node_b"
+    "wire_reaches (fold (reconnect_wire circuit operation_node_id) after ?q_circuit) q node_a node_b"
     using
       reachability_after_q
       after_same_relation
@@ -4722,6 +3282,7 @@ proof -
       qs_decomposition
     by simp
 qed
+
 lemma delete_operation_preserves_surviving_wire_reachability:
   (* Deleting an operation preserves q-reachability between any two
      surviving endpoints on a wire used by that operation.
@@ -4735,8 +3296,7 @@ lemma delete_operation_preserves_surviving_wire_reachability:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     used_wire:
       "q \<in> set (op_qargs op)"
@@ -4753,16 +3313,11 @@ lemma delete_operation_preserves_surviving_wire_reachability:
     target_survives:
       "node_b \<noteq> operation_node_id"
   shows
-    "wire_reaches
-       (delete_operation circuit operation_node_id)
-       q
-       node_a
-       node_b"
+    "wire_reaches (delete_operation circuit operation_node_id) q node_a node_b"
 
 proof -
   have unique_operation_predecessor:
-    "has_unique_wire_predecessor
-       circuit q operation_node_id"
+    "has_unique_wire_predecessor circuit q operation_node_id"
     using
       original_linear
       operation_exists
@@ -4771,8 +3326,7 @@ proof -
     by auto
 
   have unique_operation_successor:
-    "has_unique_wire_successor
-       circuit q operation_node_id"
+    "has_unique_wire_successor circuit q operation_node_id"
     using
       original_linear
       operation_exists
@@ -4782,24 +3336,20 @@ proof -
 
   obtain predecessor_relation_id where
     predecessor_relation:
-      "(predecessor_relation_id, operation_node_id)
-         \<in> wire_edge_relation circuit q"
+      "(predecessor_relation_id, operation_node_id) \<in> wire_edge_relation circuit q"
     using unique_operation_predecessor
     unfolding has_unique_wire_predecessor_def
     by blast
 
   obtain successor_relation_id where
     successor_relation:
-      "(operation_node_id, successor_relation_id)
-         \<in> wire_edge_relation circuit q"
+      "(operation_node_id, successor_relation_id) \<in> wire_edge_relation circuit q"
     using unique_operation_successor
     unfolding has_unique_wire_successor_def
     by blast
 
   have predecessor_not_none:
-    "predecessor_on_wire
-       circuit operation_node_id q
-     \<noteq> None"
+    "predecessor_on_wire circuit operation_node_id q \<noteq> None"
     using predecessor_relation
     unfolding
       predecessor_on_wire_def
@@ -4810,19 +3360,14 @@ proof -
 
   obtain predecessor_id where
     predecessor:
-      "predecessor_on_wire
-         circuit operation_node_id q =
-       Some predecessor_id"
+      "predecessor_on_wire circuit operation_node_id q = Some predecessor_id"
     using predecessor_not_none
     by (cases
-        "predecessor_on_wire
-           circuit operation_node_id q")
+        "predecessor_on_wire circuit operation_node_id q")
        auto
 
   have successor_not_none:
-    "successor_on_wire
-       circuit operation_node_id q
-     \<noteq> None"
+    "successor_on_wire circuit operation_node_id q \<noteq> None"
     using successor_relation
     unfolding
       successor_on_wire_def
@@ -4833,13 +3378,10 @@ proof -
 
   obtain successor_id where
     successor:
-      "successor_on_wire
-         circuit operation_node_id q =
-       Some successor_id"
+      "successor_on_wire circuit operation_node_id q = Some successor_id"
     using successor_not_none
     by (cases
-        "successor_on_wire
-           circuit operation_node_id q")
+        "successor_on_wire circuit operation_node_id q")
        auto
 
   have valid_operation:
@@ -4860,18 +3402,10 @@ proof -
     unfolding is_valid_operation_def
     by auto
 
-  let ?reconnected_circuit =
-    "fold
-       (reconnect_wire circuit operation_node_id)
-       (op_qargs op)
-       circuit"
+  let ?reconnected_circuit = "fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit"
 
   have reachability_after_fold:
-    "wire_reaches
-       ?reconnected_circuit
-       q
-       node_a
-       node_b"
+    "wire_reaches ?reconnected_circuit q node_a node_b"
     using
       fold_reconnect_preserves_surviving_reachability
       unique_operation_predecessor
@@ -4886,13 +3420,8 @@ proof -
     by simp
 
   have relation_after_delete:
-    "wire_edge_relation
-       (delete_operation circuit operation_node_id)
-       q
-     =
-     wire_edge_relation
-       ?reconnected_circuit
-       q"
+    "wire_edge_relation (delete_operation circuit operation_node_id) q
+   = wire_edge_relation ?reconnected_circuit q"
     using operation_exists
     unfolding
       delete_operation_def
@@ -4907,6 +3436,7 @@ proof -
     unfolding wire_reaches_def
     by simp
 qed
+
 lemma delete_operation_used_wire_preserves_comparability:
   (* Deleting an operation that uses q preserves comparability among all
      remaining nodes on q.
@@ -4931,8 +3461,7 @@ lemma delete_operation_used_wire_preserves_comparability:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     used_wire:
       "q \<in> set (op_qargs op)"
@@ -4940,9 +3469,7 @@ lemma delete_operation_used_wire_preserves_comparability:
     original_linear:
       "wire_is_linear circuit q"
   shows
-    "nodes_comparable_on_wire
-       (delete_operation circuit operation_node_id)
-       q"
+    "nodes_comparable_on_wire (delete_operation circuit operation_node_id) q"
 
 proof -
   have original_comparability:
@@ -4958,18 +3485,10 @@ proof -
     fix node_a node_b node_a_value node_b_value
 
     assume node_a_exists_after:
-      "nodes
-         (delete_operation circuit operation_node_id)
-         node_a
-       =
-       Some node_a_value"
+      "nodes (delete_operation circuit operation_node_id) node_a = Some node_a_value"
 
     assume node_b_exists_after:
-      "nodes
-         (delete_operation circuit operation_node_id)
-         node_b
-       =
-       Some node_b_value"
+      "nodes (delete_operation circuit operation_node_id) node_b = Some node_b_value"
 
     assume node_a_uses_q:
       "node_uses_qubit node_a_value q"
@@ -5009,8 +3528,8 @@ proof -
 
     have comparable_before:
       "node_a = node_b
-       \<or> wire_reaches circuit q node_a node_b
-       \<or> wire_reaches circuit q node_b node_a"
+     \<or> wire_reaches circuit q node_a node_b
+     \<or> wire_reaches circuit q node_b node_a"
       using
         original_comparability
         node_a_exists_before
@@ -5022,18 +3541,8 @@ proof -
 
     show
       "node_a = node_b
-       \<or>
-       wire_reaches
-         (delete_operation circuit operation_node_id)
-         q
-         node_a
-         node_b
-       \<or>
-       wire_reaches
-         (delete_operation circuit operation_node_id)
-         q
-         node_b
-         node_a"
+     \<or> wire_reaches (delete_operation circuit operation_node_id) q node_a node_b
+     \<or> wire_reaches (delete_operation circuit operation_node_id) q node_b node_a"
       using
         comparable_before
         delete_operation_preserves_surviving_wire_reachability
@@ -5046,6 +3555,7 @@ proof -
       by blast
   qed
 qed
+
 lemma delete_operation_used_wire_preserves_input_boundary:
   (* Deleting an operation preserves the input boundary on every wire used
      by that operation.
@@ -5062,8 +3572,7 @@ lemma delete_operation_used_wire_preserves_input_boundary:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     used_wire:
       "q \<in> set (op_qargs op)"
@@ -5072,57 +3581,42 @@ lemma delete_operation_used_wire_preserves_input_boundary:
       "wire_is_linear circuit q"
   shows
     "(\<nexists>predecessor_id.
-        (predecessor_id, get_input_node_id q)
-          \<in> wire_edge_relation
-               (delete_operation circuit operation_node_id)
-               q)
-     \<and>
-     has_unique_wire_successor
-       (delete_operation circuit operation_node_id)
-       q
-       (get_input_node_id q)"
+         (predecessor_id, get_input_node_id q) \<in> wire_edge_relation (delete_operation circuit operation_node_id) q)
+         \<and> has_unique_wire_successor (delete_operation circuit operation_node_id) q (get_input_node_id q)"
 
 proof -
-
   have no_input_predecessor:
-    "\<nexists>predecessor_id.
-       (predecessor_id, get_input_node_id q)
-         \<in> wire_edge_relation circuit q"
+    "\<nexists>predecessor_id. (predecessor_id, get_input_node_id q) \<in> wire_edge_relation circuit q"
     using original_linear
     unfolding wire_is_linear_def
     by blast
 
   have unique_input_successor:
-    "has_unique_wire_successor
-       circuit q (get_input_node_id q)"
+    "has_unique_wire_successor circuit q (get_input_node_id q)"
     using original_linear
     unfolding wire_is_linear_def
     by blast
 
   have operation_has_predecessor:
-    "has_unique_wire_predecessor
-       circuit q operation_node_id"
+    "has_unique_wire_predecessor circuit q operation_node_id"
     using original_linear operation_exists used_wire
     unfolding wire_is_linear_def
     by auto
 
   have operation_has_successor:
-    "has_unique_wire_successor
-       circuit q operation_node_id"
+    "has_unique_wire_successor circuit q operation_node_id"
     using original_linear operation_exists used_wire
     unfolding wire_is_linear_def
     by auto
 
   obtain predecessor_id where predecessor_edge:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation circuit q"
+    "(predecessor_id, operation_node_id) \<in> wire_edge_relation circuit q"
     using operation_has_predecessor
     unfolding has_unique_wire_predecessor_def
     by blast
 
   obtain successor_id where successor_edge:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation circuit q"
+    "(operation_node_id, successor_id) \<in> wire_edge_relation circuit q"
     using operation_has_successor
     unfolding has_unique_wire_successor_def
     by blast
@@ -5138,8 +3632,7 @@ proof -
     by force
 
   then obtain selected_predecessor where predecessor:
-    "predecessor_on_wire circuit operation_node_id q =
-       Some selected_predecessor"
+    "predecessor_on_wire circuit operation_node_id q = Some selected_predecessor"
     by (cases "predecessor_on_wire circuit operation_node_id q") auto
 
   have successor_not_none:
@@ -5153,8 +3646,7 @@ proof -
     by force
 
   then obtain selected_successor where successor:
-    "successor_on_wire circuit operation_node_id q =
-       Some selected_successor"
+    "successor_on_wire circuit operation_node_id q = Some selected_successor"
     by (cases "successor_on_wire circuit operation_node_id q") auto
 
   have valid_operation:
@@ -5181,20 +3673,12 @@ proof -
     by blast
 
   let ?reconnected_circuit =
-    "fold
-       (reconnect_wire circuit operation_node_id)
-       (op_qargs op)
-       circuit"
+    "fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit"
 
   have boundary_after_reconnection:
     "(\<nexists>predecessor_id.
-        (predecessor_id, get_input_node_id q)
-          \<in> wire_edge_relation ?reconnected_circuit q)
-     \<and>
-     has_unique_wire_successor
-       ?reconnected_circuit
-       q
-       (get_input_node_id q)"
+        (predecessor_id, get_input_node_id q) \<in> wire_edge_relation ?reconnected_circuit q)
+       \<and> has_unique_wire_successor ?reconnected_circuit q (get_input_node_id q)"
     using
       fold_reconnect_preserves_input_boundary[
         OF
@@ -5207,11 +3691,7 @@ proof -
     by simp
 
   have deleted_wire_relation:
-    "wire_edge_relation
-       (delete_operation circuit operation_node_id)
-       q
-     =
-     wire_edge_relation ?reconnected_circuit q"
+    "wire_edge_relation (delete_operation circuit operation_node_id) q = wire_edge_relation ?reconnected_circuit q"
     
     using operation_exists
     unfolding
@@ -5238,52 +3718,28 @@ lemma reconnect_wire_preserves_output_boundary:
   *)
   assumes
     unique_output_predecessor:
-      "has_unique_wire_predecessor
-         circuit q (get_output_node_id q)"
+      "has_unique_wire_predecessor circuit q (get_output_node_id q)"
   and
     no_output_successor:
-      "\<nexists>successor_id.
-         (get_output_node_id q, successor_id)
-           \<in> wire_edge_relation circuit q"
+      "\<nexists>successor_id. (get_output_node_id q, successor_id) \<in> wire_edge_relation circuit q"
   and
     predecessor:
-      "predecessor_on_wire circuit operation_node_id q =
-         Some predecessor_id"
+      "predecessor_on_wire circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire circuit operation_node_id q =
-         Some successor_id"
+      "successor_on_wire circuit operation_node_id q = Some successor_id"
   shows
-    "has_unique_wire_predecessor
-       (reconnect_wire
-          circuit
-          operation_node_id
-          q
-          circuit)
-       q
-       (get_output_node_id q)
-     \<and>
-     (\<nexists>successor_id.
-        (get_output_node_id q, successor_id)
-          \<in> wire_edge_relation
-               (reconnect_wire
-                  circuit
-                  operation_node_id
-                  q
-                  circuit)
-               q)"
+    "has_unique_wire_predecessor (reconnect_wire circuit operation_node_id q circuit) q (get_output_node_id q) \<and> (\<nexists>successor_id. (get_output_node_id q, successor_id) \<in> wire_edge_relation (reconnect_wire circuit operation_node_id q circuit) q)"
 
 proof -
   have incoming_operation_edge:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation circuit q"
+    "(predecessor_id, operation_node_id) \<in> wire_edge_relation circuit q"
     using predecessor_on_wire_correct[OF predecessor]
     unfolding wire_edge_relation_def
     by simp
 
   have outgoing_operation_edge:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation circuit q"
+    "(operation_node_id, successor_id) \<in> wire_edge_relation circuit q"
     using successor_on_wire_correct[OF successor]
     unfolding wire_edge_relation_def
     by simp
@@ -5295,8 +3751,7 @@ proof -
       "operation_node_id = get_output_node_id q"
 
     then have
-      "(get_output_node_id q, successor_id)
-         \<in> wire_edge_relation circuit q"
+      "(get_output_node_id q, successor_id) \<in> wire_edge_relation circuit q"
       using outgoing_operation_edge
       by simp
 
@@ -5312,8 +3767,7 @@ proof -
       "predecessor_id = get_output_node_id q"
 
     then have
-      "(get_output_node_id q, operation_node_id)
-         \<in> wire_edge_relation circuit q"
+      "(get_output_node_id q, operation_node_id) \<in> wire_edge_relation circuit q"
       using incoming_operation_edge
       by simp
 
@@ -5323,20 +3777,7 @@ proof -
   qed
 
   have relation_after:
-    "wire_edge_relation
-       (reconnect_wire
-          circuit
-          operation_node_id
-          q
-          circuit)
-       q
-     =
-     insert
-       (predecessor_id, successor_id)
-       (wire_edge_relation circuit q
-          -
-          {(predecessor_id, operation_node_id),
-           (operation_node_id, successor_id)})"
+    "wire_edge_relation (reconnect_wire circuit operation_node_id q circuit) q = insert (predecessor_id, successor_id) (wire_edge_relation circuit q - {(predecessor_id, operation_node_id), (operation_node_id, successor_id)})"
     using
       reconnect_wire_successor_predecessor_characterisation[
         OF predecessor successor]
@@ -5352,8 +3793,8 @@ proof -
       relation_after
     unfolding has_unique_wire_predecessor_def
     by auto
-
 qed
+
 lemma reconnect_wire_preserves_output_boundary_from_same_relation:
   (* During a fold, predecessor and successor are looked up in the fixed
      original circuit, while the edge rewrite is applied to the current
@@ -5364,71 +3805,45 @@ lemma reconnect_wire_preserves_output_boundary_from_same_relation:
   *)
   assumes
     unique_output_predecessor:
-      "has_unique_wire_predecessor
-         current_circuit q (get_output_node_id q)"
+      "has_unique_wire_predecessor current_circuit q (get_output_node_id q)"
   and
     no_output_successor:
-      "\<nexists>successor_id.
-         (get_output_node_id q, successor_id)
-           \<in> wire_edge_relation current_circuit q"
+      "\<nexists>successor_id. (get_output_node_id q, successor_id) \<in> wire_edge_relation current_circuit q"
   and
     same_relation:
-      "wire_edge_relation current_circuit q =
-         wire_edge_relation original_circuit q"
+      "wire_edge_relation current_circuit q = wire_edge_relation original_circuit q"
   and
     predecessor:
-      "predecessor_on_wire
-         original_circuit operation_node_id q =
-         Some predecessor_id"
+      "predecessor_on_wire original_circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         original_circuit operation_node_id q =
-         Some successor_id"
+      "successor_on_wire original_circuit operation_node_id q = Some successor_id"
   shows
     "has_unique_wire_predecessor
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-       (get_output_node_id q)
-     \<and>
-     (\<nexists>successor_id.
-        (get_output_node_id q, successor_id)
-          \<in> wire_edge_relation
-               (reconnect_wire
-                  original_circuit
-                  operation_node_id
-                  q
-                  current_circuit)
-               q)"
+         (reconnect_wire original_circuit operation_node_id q current_circuit) q (get_output_node_id q)
+       \<and> (\<nexists>successor_id.
+         (get_output_node_id q, successor_id) \<in> wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) q)"
 
 proof -
   have incoming_operation_edge_original:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation original_circuit q"
+    "(predecessor_id, operation_node_id) \<in> wire_edge_relation original_circuit q"
     using predecessor_on_wire_correct[OF predecessor]
     unfolding wire_edge_relation_def
     by simp
 
   have incoming_operation_edge:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation current_circuit q"
+    "(predecessor_id, operation_node_id) \<in> wire_edge_relation current_circuit q"
     using incoming_operation_edge_original same_relation
     by simp
 
   have outgoing_operation_edge_original:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation original_circuit q"
+    "(operation_node_id, successor_id) \<in> wire_edge_relation original_circuit q"
     using successor_on_wire_correct[OF successor]
     unfolding wire_edge_relation_def
     by simp
 
   have outgoing_operation_edge:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation current_circuit q"
+    "(operation_node_id, successor_id) \<in> wire_edge_relation current_circuit q"
     using outgoing_operation_edge_original same_relation
     by simp
 
@@ -5440,8 +3855,7 @@ proof -
         "operation_node_id = get_output_node_id q"
 
     then have
-      "(get_output_node_id q, successor_id)
-         \<in> wire_edge_relation current_circuit q"
+      "(get_output_node_id q, successor_id) \<in> wire_edge_relation current_circuit q"
       using outgoing_operation_edge
       by simp
 
@@ -5452,37 +3866,14 @@ proof -
 
   have predecessor_not_output:
     "predecessor_id \<noteq> get_output_node_id q"
-  proof
-    assume
-      predecessor_is_output:
-        "predecessor_id = get_output_node_id q"
-
-    then have
-      "(get_output_node_id q, operation_node_id)
-         \<in> wire_edge_relation current_circuit q"
-      using incoming_operation_edge
-      by simp
-
-    then show False
-      using no_output_successor
-      by blast
-  qed
+    using
+      incoming_operation_edge
+      no_output_successor
+    by auto
 
   have relation_after:
-    "wire_edge_relation
-       (reconnect_wire
-          original_circuit
-          operation_node_id
-          q
-          current_circuit)
-       q
-     =
-     insert
-       (predecessor_id, successor_id)
-       (wire_edge_relation current_circuit q
-          -
-          {(predecessor_id, operation_node_id),
-           (operation_node_id, successor_id)})"
+    "wire_edge_relation (reconnect_wire original_circuit operation_node_id q current_circuit) q
+     = insert (predecessor_id, successor_id) (wire_edge_relation current_circuit q - {(predecessor_id, operation_node_id), (operation_node_id, successor_id)})"
     using
       reconnect_wire_successor_predecessor_characterisation[
         OF predecessor successor]
@@ -5499,29 +3890,23 @@ proof -
     unfolding has_unique_wire_predecessor_def
     by auto
 qed
+
 lemma fold_reconnect_preserves_output_boundary:
   (* In a distinct list of affected wires containing q, reconnections on
      wires before and after q leave q's edge relation unchanged. The single
      reconnection of q preserves its output boundary. *)
   assumes
     unique_output_predecessor:
-      "has_unique_wire_predecessor
-         circuit q (get_output_node_id q)"
+      "has_unique_wire_predecessor circuit q (get_output_node_id q)"
   and
     no_output_successor:
-      "\<nexists>successor_id.
-         (get_output_node_id q, successor_id)
-           \<in> wire_edge_relation circuit q"
+      "\<nexists>successor_id. (get_output_node_id q, successor_id) \<in> wire_edge_relation circuit q"
   and
     predecessor:
-      "predecessor_on_wire
-         circuit operation_node_id q =
-         Some predecessor_id"
+      "predecessor_on_wire circuit operation_node_id q = Some predecessor_id"
   and
     successor:
-      "successor_on_wire
-         circuit operation_node_id q =
-         Some successor_id"
+      "successor_on_wire circuit operation_node_id q = Some successor_id"
   and
     distinct_wires:
       "distinct qs"
@@ -5529,22 +3914,9 @@ lemma fold_reconnect_preserves_output_boundary:
     used_wire:
       "q \<in> set qs"
   shows
-    "has_unique_wire_predecessor
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          qs
-          circuit)
-       q
-       (get_output_node_id q)
-     \<and>
-     (\<nexists>successor_id.
-        (get_output_node_id q, successor_id)
-          \<in> wire_edge_relation
-               (fold
-                  (reconnect_wire circuit operation_node_id)
-                  qs
-                  circuit)
-               q)"
+    "has_unique_wire_predecessor (fold (reconnect_wire circuit operation_node_id) qs circuit) q (get_output_node_id q)
+   \<and> (\<nexists>successor_id.
+         (get_output_node_id q, successor_id) \<in> wire_edge_relation (fold (reconnect_wire circuit operation_node_id) qs circuit) q)"
 
 proof -
   obtain before after where
@@ -5563,22 +3935,12 @@ proof -
     using distinct_wires qs_decomposition
     by auto
 
-  let ?before_circuit =
-    "fold
-       (reconnect_wire circuit operation_node_id)
-       before
-       circuit"
+  let ?before_circuit = "fold (reconnect_wire circuit operation_node_id) before circuit"
 
-  let ?q_circuit =
-    "reconnect_wire
-       circuit
-       operation_node_id
-       q
-       ?before_circuit"
+  let ?q_circuit = "reconnect_wire circuit operation_node_id q ?before_circuit"
 
   have before_same_relation:
-    "wire_edge_relation ?before_circuit q =
-       wire_edge_relation circuit q"
+    "wire_edge_relation ?before_circuit q = wire_edge_relation circuit q"
     using
       fold_reconnect_preserves_other_wire_relation[
         where original_circuit = circuit
@@ -5590,8 +3952,7 @@ proof -
     by simp
 
   have unique_output_predecessor_before:
-    "has_unique_wire_predecessor
-       ?before_circuit q (get_output_node_id q)"
+    "has_unique_wire_predecessor ?before_circuit q (get_output_node_id q)"
     using
       unique_output_predecessor
       before_same_relation
@@ -5599,23 +3960,15 @@ proof -
     by auto
 
   have no_output_successor_before:
-    "\<nexists>successor_id.
-       (get_output_node_id q, successor_id)
-         \<in> wire_edge_relation ?before_circuit q"
+    "\<nexists>successor_id. (get_output_node_id q, successor_id) \<in> wire_edge_relation ?before_circuit q"
     using
       no_output_successor
       before_same_relation
     by simp
 
   have boundary_after_q:
-    "has_unique_wire_predecessor
-       ?q_circuit
-       q
-       (get_output_node_id q)
-     \<and>
-     (\<nexists>successor_id.
-        (get_output_node_id q, successor_id)
-          \<in> wire_edge_relation ?q_circuit q)"
+    "has_unique_wire_predecessor ?q_circuit q (get_output_node_id q)
+   \<and> (\<nexists>successor_id. (get_output_node_id q, successor_id) \<in> wire_edge_relation ?q_circuit q)"
     using
       reconnect_wire_preserves_output_boundary_from_same_relation[
         OF
@@ -5627,14 +3980,7 @@ proof -
     by simp
 
   have after_same_relation:
-    "wire_edge_relation
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          after
-          ?q_circuit)
-       q
-     =
-     wire_edge_relation ?q_circuit q"
+    "wire_edge_relation (fold (reconnect_wire circuit operation_node_id) after ?q_circuit) q = wire_edge_relation ?q_circuit q"
     using
       fold_reconnect_preserves_other_wire_relation[
         where original_circuit = circuit
@@ -5653,6 +3999,7 @@ proof -
     unfolding has_unique_wire_predecessor_def
     by auto
 qed
+
 lemma delete_operation_used_wire_preserves_output_boundary:
   (* Deleting an operation on wire q preserves the output boundary of q.
 
@@ -5666,8 +4013,7 @@ lemma delete_operation_used_wire_preserves_output_boundary:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     used_wire:
       "q \<in> set (op_qargs op)"
@@ -5675,68 +4021,48 @@ lemma delete_operation_used_wire_preserves_output_boundary:
     original_linear:
       "wire_is_linear circuit q"
   shows
-    "has_unique_wire_predecessor
-       (delete_operation circuit operation_node_id)
-       q
-       (get_output_node_id q)
-     \<and>
-     (\<nexists>successor_id.
-        (get_output_node_id q, successor_id)
-          \<in> wire_edge_relation
-               (delete_operation circuit operation_node_id)
-               q)"
+    "has_unique_wire_predecessor (delete_operation circuit operation_node_id) q (get_output_node_id q)
+   \<and> (\<nexists>successor_id.
+     (get_output_node_id q, successor_id) \<in> wire_edge_relation (delete_operation circuit operation_node_id) q)"
 
 proof -
   have unique_output_predecessor:
-    "has_unique_wire_predecessor
-       circuit q (get_output_node_id q)"
+    "has_unique_wire_predecessor circuit q (get_output_node_id q)"
     using original_linear
     unfolding wire_is_linear_def
     by blast
 
   have no_output_successor:
-    "\<nexists>successor_id.
-       (get_output_node_id q, successor_id)
-         \<in> wire_edge_relation circuit q"
+    "\<nexists>successor_id. (get_output_node_id q, successor_id) \<in> wire_edge_relation circuit q"
     using original_linear
     unfolding wire_is_linear_def
     by blast
 
   have operation_has_predecessor:
-    "has_unique_wire_predecessor
-       circuit q operation_node_id"
+    "has_unique_wire_predecessor circuit q operation_node_id"
     using original_linear operation_exists used_wire
     unfolding wire_is_linear_def
     by auto
 
   have operation_has_successor:
-    "has_unique_wire_successor
-       circuit q operation_node_id"
+    "has_unique_wire_successor circuit q operation_node_id"
     using original_linear operation_exists used_wire
     unfolding wire_is_linear_def
     by auto
 
   have predecessor_exists:
-    "\<exists>predecessor_id.
-       predecessor_on_wire
-         circuit
-         operation_node_id
-         q
-       =
-       Some predecessor_id"
+    "\<exists>predecessor_id. predecessor_on_wire circuit operation_node_id q = Some predecessor_id"
   
   proof -
     obtain predecessor_id where
       predecessor_relation:
-        "(predecessor_id, operation_node_id)
-           \<in> wire_edge_relation circuit q"
+        "(predecessor_id, operation_node_id) \<in> wire_edge_relation circuit q"
       using operation_has_predecessor
       unfolding has_unique_wire_predecessor_def
       by blast
 
     have incoming_edge_exists:
-      "make_edge predecessor_id operation_node_id q
-         \<in> edges circuit"
+      "make_edge predecessor_id operation_node_id q \<in> edges circuit"
       using predecessor_relation
       unfolding wire_edge_relation_def
       by simp
@@ -5744,24 +4070,16 @@ proof -
     have incoming_exists:
       "\<exists>incoming \<in> edges circuit.
          edge_target incoming = operation_node_id
-         \<and>
-         edge_wire incoming = q"
+       \<and> edge_wire incoming = q"
     proof
       show
-        "make_edge predecessor_id operation_node_id q
-           \<in> edges circuit"
-        using incoming_edge_exists .
+        "make_edge predecessor_id operation_node_id q \<in> edges circuit"
+        using incoming_edge_exists
+        by simp
 
       show
-        "edge_target
-           (make_edge predecessor_id operation_node_id q)
-           =
-           operation_node_id
-         \<and>
-         edge_wire
-           (make_edge predecessor_id operation_node_id q)
-           =
-           q"
+        "edge_target (make_edge predecessor_id operation_node_id q) = operation_node_id
+       \<and> edge_wire (make_edge predecessor_id operation_node_id q) = q"
         unfolding make_edge_def
         by simp
     qed
@@ -5776,64 +4094,33 @@ proof -
 
   obtain predecessor_id where
     predecessor:
-      "predecessor_on_wire
-         circuit
-         operation_node_id
-         q
-       =
-       Some predecessor_id"
+      "predecessor_on_wire circuit operation_node_id q = Some predecessor_id"
     using predecessor_exists
     by blast
 
   have successor_exists:
-    "\<exists>successor_id.
-       successor_on_wire
-         circuit
-         operation_node_id
-         q
-       =
-       Some successor_id"
+    "\<exists>successor_id. successor_on_wire circuit operation_node_id q = Some successor_id"
   proof -
-
     obtain successor_id where
       successor_relation:
-        "(operation_node_id, successor_id)
-           \<in> wire_edge_relation circuit q"
+        "(operation_node_id, successor_id) \<in> wire_edge_relation circuit q"
       using operation_has_successor
       unfolding has_unique_wire_successor_def
       by blast
 
     have outgoing_edge_exists:
-      "make_edge operation_node_id successor_id q
-         \<in> edges circuit"
+      "make_edge operation_node_id successor_id q \<in> edges circuit"
       using successor_relation
       unfolding wire_edge_relation_def
       by simp
 
     have outgoing_exists:
       "\<exists>outgoing \<in> edges circuit.
-         edge_source outgoing = operation_node_id
-         \<and>
-         edge_wire outgoing = q"
-    proof
-      show
-        "make_edge operation_node_id successor_id q
-           \<in> edges circuit"
-        using outgoing_edge_exists .
-
-      show
-        "edge_source
-           (make_edge operation_node_id successor_id q)
-           =
-           operation_node_id
-         \<and>
-         edge_wire
-           (make_edge operation_node_id successor_id q)
-           =
-           q"
-        unfolding make_edge_def
-        by simp
-    qed
+         edge_source outgoing = operation_node_id \<and> edge_wire outgoing = q"
+      using
+        make_edge_def
+        outgoing_edge_exists
+      by force
 
     show ?thesis
       using outgoing_exists
@@ -5845,15 +4132,9 @@ proof -
 
   obtain successor_id where
     successor:
-      "successor_on_wire
-         circuit
-         operation_node_id
-         q
-       =
-       Some successor_id"
+      "successor_on_wire circuit operation_node_id q = Some successor_id"
     using successor_exists
     by blast
-
 
   have valid_operation:
     "is_valid_operation op"
@@ -5875,22 +4156,9 @@ proof -
     by auto
 
   have boundary_after_fold:
-    "has_unique_wire_predecessor
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          (op_qargs op)
-          circuit)
-       q
-       (get_output_node_id q)
-     \<and>
-     (\<nexists>successor_id.
-        (get_output_node_id q, successor_id)
-          \<in> wire_edge_relation
-               (fold
-                  (reconnect_wire circuit operation_node_id)
-                  (op_qargs op)
-                  circuit)
-               q)"
+    "has_unique_wire_predecessor (fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit) q (get_output_node_id q)
+   \<and> (\<nexists>successor_id. (get_output_node_id q, successor_id)
+       \<in> wire_edge_relation (fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit) q)"
     using
       fold_reconnect_preserves_output_boundary[
         OF
@@ -5903,15 +4171,8 @@ proof -
     by simp
 
   have relation_preserved:
-    "wire_edge_relation
-       (delete_operation circuit operation_node_id)
-       q =
-     wire_edge_relation
-       (fold
-          (reconnect_wire circuit operation_node_id)
-          (op_qargs op)
-          circuit)
-       q"
+    "wire_edge_relation (delete_operation circuit operation_node_id) q
+     = wire_edge_relation (fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit) q"
     unfolding
       delete_operation_def
     using operation_exists
@@ -5923,8 +4184,8 @@ proof -
       relation_preserved
     unfolding has_unique_wire_predecessor_def
     by auto
-
 qed
+
 lemma delete_operation_used_wire_preserves_operation_degrees:
   (* Every remaining operation node using q retains exactly one immediate
      predecessor and exactly one immediate successor on q.
@@ -5947,8 +4208,7 @@ lemma delete_operation_used_wire_preserves_operation_degrees:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     used_wire:
       "q \<in> set (op_qargs op)"
@@ -5956,35 +4216,16 @@ lemma delete_operation_used_wire_preserves_operation_degrees:
     original_linear:
       "wire_is_linear circuit q"
   shows
-    "\<forall>node_id remaining_op.
-       nodes
-         (delete_operation circuit operation_node_id)
-         node_id
-       =
-       Some (OperationNode remaining_op)
-       \<longrightarrow>
-       node_uses_qubit (OperationNode remaining_op) q
-       \<longrightarrow>
-       has_unique_wire_predecessor
-         (delete_operation circuit operation_node_id)
-         q
-         node_id
-       \<and>
-       has_unique_wire_successor
-         (delete_operation circuit operation_node_id)
-         q
-         node_id"
+    "\<forall>node_id remaining_op. nodes (delete_operation circuit operation_node_id) node_id = Some (OperationNode remaining_op)
+     \<longrightarrow> node_uses_qubit (OperationNode remaining_op) q
+     \<longrightarrow> has_unique_wire_predecessor (delete_operation circuit operation_node_id) q node_id
+         \<and> has_unique_wire_successor (delete_operation circuit operation_node_id) q node_id"
 
 proof (intro allI impI)
-
   fix node_id remaining_op
 
   assume remaining_operation_exists:
-    "nodes
-       (delete_operation circuit operation_node_id)
-       node_id
-     =
-     Some (OperationNode remaining_op)"
+    "nodes (delete_operation circuit operation_node_id) node_id = Some (OperationNode remaining_op)"
 
   assume remaining_operation_uses_q:
     "node_uses_qubit (OperationNode remaining_op) q"
@@ -5997,8 +4238,7 @@ proof (intro allI impI)
     by auto
 
   have remaining_operation_exists_originally:
-    "nodes circuit node_id =
-       Some (OperationNode remaining_op)"
+    "nodes circuit node_id = Some (OperationNode remaining_op)"
     using
       operation_exists
       remaining_node
@@ -6006,8 +4246,7 @@ proof (intro allI impI)
     by simp
 
   have remaining_unique_predecessor:
-    "has_unique_wire_predecessor
-       circuit q node_id"
+    "has_unique_wire_predecessor circuit q node_id"
     using
       original_linear
       remaining_operation_exists_originally
@@ -6016,8 +4255,7 @@ proof (intro allI impI)
     by blast
 
   have remaining_unique_successor:
-    "has_unique_wire_successor
-       circuit q node_id"
+    "has_unique_wire_successor circuit q node_id"
     using
       original_linear
       remaining_operation_exists_originally
@@ -6026,8 +4264,7 @@ proof (intro allI impI)
     by blast
 
   have deleted_operation_has_predecessor:
-    "has_unique_wire_predecessor
-       circuit q operation_node_id"
+    "has_unique_wire_predecessor circuit q operation_node_id"
     using
       original_linear
       operation_exists
@@ -6036,8 +4273,7 @@ proof (intro allI impI)
     by auto
 
   have deleted_operation_has_successor:
-    "has_unique_wire_successor
-       circuit q operation_node_id"
+    "has_unique_wire_successor circuit q operation_node_id"
     using
       original_linear
       operation_exists
@@ -6046,24 +4282,19 @@ proof (intro allI impI)
     by auto
 
   obtain predecessor_id where predecessor_relation:
-    "(predecessor_id, operation_node_id)
-       \<in> wire_edge_relation circuit q"
+    "(predecessor_id, operation_node_id) \<in> wire_edge_relation circuit q"
     using deleted_operation_has_predecessor
     unfolding has_unique_wire_predecessor_def
     by blast
 
   obtain successor_id where successor_relation:
-    "(operation_node_id, successor_id)
-       \<in> wire_edge_relation circuit q"
+    "(operation_node_id, successor_id) \<in> wire_edge_relation circuit q"
     using deleted_operation_has_successor
     unfolding has_unique_wire_successor_def
     by blast
 
   have predecessor_not_none:
-    "predecessor_on_wire
-       circuit operation_node_id q
-     \<noteq>
-     None"
+    "predecessor_on_wire circuit operation_node_id q \<noteq> None"
     using predecessor_relation
     unfolding
       predecessor_on_wire_def
@@ -6073,20 +4304,11 @@ proof (intro allI impI)
     by force
 
   then obtain selected_predecessor where predecessor:
-    "predecessor_on_wire
-       circuit operation_node_id q
-     =
-     Some selected_predecessor"
-    by (cases
-        "predecessor_on_wire
-           circuit operation_node_id q")
-       auto
+    "predecessor_on_wire circuit operation_node_id q = Some selected_predecessor"
+    by (cases "predecessor_on_wire circuit operation_node_id q") auto
 
   have successor_not_none:
-    "successor_on_wire
-       circuit operation_node_id q
-     \<noteq>
-     None"
+    "successor_on_wire circuit operation_node_id q \<noteq> None"
     using successor_relation
     unfolding
       successor_on_wire_def
@@ -6096,14 +4318,8 @@ proof (intro allI impI)
     by force
 
   then obtain selected_successor where successor:
-    "successor_on_wire
-       circuit operation_node_id q
-     =
-     Some selected_successor"
-    by (cases
-        "successor_on_wire
-           circuit operation_node_id q")
-       auto
+    "successor_on_wire circuit operation_node_id q = Some selected_successor"
+    by (cases "successor_on_wire circuit operation_node_id q") auto
 
   have original_acyclic:
     "is_acyclic_circuit circuit"
@@ -6113,81 +4329,19 @@ proof (intro allI impI)
 
   have predecessor_not_deleted:
     "selected_predecessor \<noteq> operation_node_id"
-  proof
-    assume predecessor_is_deleted:
-      "selected_predecessor = operation_node_id"
-
-    have self_loop_edge:
-      "make_edge
-         operation_node_id
-         operation_node_id
-         q
-       \<in>
-       edges circuit"
-      using
-        predecessor_on_wire_correct[OF predecessor]
-        predecessor_is_deleted
-      by simp
-
-    have self_loop_relation:
-      "(operation_node_id, operation_node_id)
-       \<in>
-       edge_relation circuit"
-      using self_loop_edge
-      unfolding edge_relation_def make_edge_def
-      by force
-
-    have self_reachable:
-      "(operation_node_id, operation_node_id)
-       \<in>
-       (edge_relation circuit)\<^sup>+"
-      using self_loop_relation
-      by (rule r_into_trancl)
-
-    show False
-      using original_acyclic self_reachable
-      unfolding is_acyclic_circuit_def acyclic_def
-      by simp
-  qed
+    using
+      original_acyclic
+      predecessor
+      predecessor_on_wire_not_self
+    by auto
 
   have successor_not_deleted:
     "selected_successor \<noteq> operation_node_id"
-  proof
-    assume successor_is_deleted:
-      "selected_successor = operation_node_id"
-
-    have self_loop_edge:
-      "make_edge
-         operation_node_id
-         operation_node_id
-         q
-       \<in>
-       edges circuit"
-      using
-        successor_on_wire_correct[OF successor]
-        successor_is_deleted
-      by simp
-
-    have self_loop_relation:
-      "(operation_node_id, operation_node_id)
-       \<in>
-       edge_relation circuit"
-      using self_loop_edge
-      unfolding edge_relation_def make_edge_def
-      by force
-
-    have self_reachable:
-      "(operation_node_id, operation_node_id)
-       \<in>
-       (edge_relation circuit)\<^sup>+"
-      using self_loop_relation
-      by (rule r_into_trancl)
-
-    show False
-      using original_acyclic self_reachable
-      unfolding is_acyclic_circuit_def acyclic_def
-      by simp
-  qed
+    using
+      original_acyclic
+      successor
+      successor_on_wire_not_self
+    by auto
 
   have predecessor_not_successor:
     "selected_predecessor \<noteq> selected_successor"
@@ -6196,66 +4350,44 @@ proof (intro allI impI)
       "selected_predecessor = selected_successor"
 
     have incoming_edge:
-      "make_edge
-         selected_predecessor
-         operation_node_id
-         q
-       \<in>
-       edges circuit"
+      "make_edge selected_predecessor operation_node_id q \<in> edges circuit"
       using predecessor_on_wire_correct[OF predecessor]
-      .
+      by simp
 
     have outgoing_edge:
-      "make_edge
-         operation_node_id
-         selected_successor
-         q
-       \<in>
-       edges circuit"
+      "make_edge operation_node_id selected_successor q \<in> edges circuit"
       using successor_on_wire_correct[OF successor]
-      .
+      by simp
 
     have incoming_relation:
-      "(selected_predecessor, operation_node_id)
-       \<in>
-       edge_relation circuit"
+      "(selected_predecessor, operation_node_id) \<in> edge_relation circuit"
       using incoming_edge
       unfolding edge_relation_def make_edge_def
       by force
 
     have outgoing_relation:
-      "(operation_node_id, selected_successor)
-       \<in>
-       edge_relation circuit"
+      "(operation_node_id, selected_successor) \<in> edge_relation circuit"
       using outgoing_edge
       unfolding edge_relation_def make_edge_def
       by force
 
     have incoming_path:
-      "(selected_predecessor, operation_node_id)
-       \<in>
-       (edge_relation circuit)\<^sup>+"
+      "(selected_predecessor, operation_node_id) \<in> (edge_relation circuit)\<^sup>+"
       using incoming_relation
       by (rule r_into_trancl)
 
     have outgoing_path:
-      "(operation_node_id, selected_successor)
-       \<in>
-       (edge_relation circuit)\<^sup>+"
+      "(operation_node_id, selected_successor) \<in> (edge_relation circuit)\<^sup>+"
       using outgoing_relation
       by (rule r_into_trancl)
 
     have endpoint_cycle:
-      "(selected_predecessor, selected_successor)
-       \<in>
-       (edge_relation circuit)\<^sup>+"
+      "(selected_predecessor, selected_successor) \<in> (edge_relation circuit)\<^sup>+"
       using incoming_path outgoing_path
       by (rule trancl_trans)
 
     then have self_reachable:
-      "(selected_predecessor, selected_predecessor)
-       \<in>
-       (edge_relation circuit)\<^sup>+"
+      "(selected_predecessor, selected_predecessor) \<in> (edge_relation circuit)\<^sup>+"
       using endpoints_equal
       by simp
 
@@ -6288,21 +4420,11 @@ proof (intro allI impI)
     by auto
 
   let ?reconnected_circuit =
-    "fold
-       (reconnect_wire circuit operation_node_id)
-       (op_qargs op)
-       circuit"
+    "fold (reconnect_wire circuit operation_node_id) (op_qargs op) circuit"
 
   have degrees_after_reconnection:
-    "has_unique_wire_predecessor
-       ?reconnected_circuit
-       q
-       node_id
-     \<and>
-     has_unique_wire_successor
-       ?reconnected_circuit
-       q
-       node_id"
+    "has_unique_wire_predecessor ?reconnected_circuit q node_id
+   \<and> has_unique_wire_successor ?reconnected_circuit q node_id"
     using
       distinct_wires
       fold_reconnect_preserves_operation_degrees
@@ -6318,13 +4440,8 @@ proof (intro allI impI)
     by simp
 
   have deleted_wire_relation:
-    "wire_edge_relation
-       (delete_operation circuit operation_node_id)
-       q
-     =
-     wire_edge_relation
-       ?reconnected_circuit
-       q"
+    "wire_edge_relation (delete_operation circuit operation_node_id) q
+     = wire_edge_relation ?reconnected_circuit q"
     using operation_exists
     unfolding
       delete_operation_def
@@ -6333,15 +4450,8 @@ proof (intro allI impI)
     by simp
 
   show
-    "has_unique_wire_predecessor
-       (delete_operation circuit operation_node_id)
-       q
-       node_id
-     \<and>
-     has_unique_wire_successor
-       (delete_operation circuit operation_node_id)
-       q
-       node_id"
+    "has_unique_wire_predecessor (delete_operation circuit operation_node_id) q node_id
+   \<and> has_unique_wire_successor (delete_operation circuit operation_node_id) q node_id"
     using
       degrees_after_reconnection
       deleted_wire_relation
@@ -6349,8 +4459,8 @@ proof (intro allI impI)
       has_unique_wire_predecessor_def
       has_unique_wire_successor_def
     by auto
-
 qed
+
 lemma delete_operation_preserves_linear_used_wire:
   (* If the deleted operation uses q, deletion contracts one internal node
      of the linear q-wire.
@@ -6379,107 +4489,22 @@ lemma delete_operation_preserves_linear_used_wire:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     used_wire:
       "q \<in> set (op_qargs op)"
   shows
-    "wire_is_linear circuit q
-     \<Longrightarrow>
-     wire_is_linear
-       (delete_operation circuit operation_node_id)
-       q"
-
-proof -
-  assume original_linear:
-    "wire_is_linear circuit q"
-
-  have comparability_after:
-    "nodes_comparable_on_wire
-       (delete_operation circuit operation_node_id)
-       q"
-    using
+    "wire_is_linear circuit q \<Longrightarrow> wire_is_linear (delete_operation circuit operation_node_id) q"
+  
+  using delete_operation_used_wire_preserves_comparability
+      delete_operation_used_wire_preserves_input_boundary
+      delete_operation_used_wire_preserves_operation_degrees
+      delete_operation_used_wire_preserves_output_boundary
+      operation_exists used_wire
       valid_circuit
-      operation_exists
-      used_wire
-      original_linear
-    by (rule delete_operation_used_wire_preserves_comparability)
+      wire_is_linear_def
+  by simp
 
-  have input_boundary_after:
-    "(\<nexists>predecessor_id.
-        (predecessor_id, get_input_node_id q)
-          \<in> wire_edge_relation
-               (delete_operation circuit operation_node_id)
-               q)
-     \<and>
-     has_unique_wire_successor
-       (delete_operation circuit operation_node_id)
-       q
-       (get_input_node_id q)"
-    using
-      valid_circuit
-      operation_exists
-      used_wire
-      original_linear
-    by (rule delete_operation_used_wire_preserves_input_boundary)
-
-  have output_boundary_after:
-    "has_unique_wire_predecessor
-       (delete_operation circuit operation_node_id)
-       q
-       (get_output_node_id q)
-     \<and>
-     (\<nexists>successor_id.
-        (get_output_node_id q, successor_id)
-          \<in> wire_edge_relation
-               (delete_operation circuit operation_node_id)
-               q)"
-    using
-      valid_circuit
-      operation_exists
-      used_wire
-      original_linear
-    by (rule delete_operation_used_wire_preserves_output_boundary)
-
-  have operation_degrees_after:
-    "\<forall>node_id remaining_op.
-       nodes
-         (delete_operation circuit operation_node_id)
-         node_id
-       =
-       Some (OperationNode remaining_op)
-       \<longrightarrow>
-       node_uses_qubit (OperationNode remaining_op) q
-       \<longrightarrow>
-       has_unique_wire_predecessor
-         (delete_operation circuit operation_node_id)
-         q
-         node_id
-       \<and>
-       has_unique_wire_successor
-         (delete_operation circuit operation_node_id)
-         q
-         node_id"
-    using
-      valid_circuit
-      operation_exists
-      used_wire
-      original_linear
-    by (rule delete_operation_used_wire_preserves_operation_degrees)
-
-  show
-    "wire_is_linear
-       (delete_operation circuit operation_node_id)
-       q"
-    using
-      comparability_after
-      input_boundary_after
-      output_boundary_after
-      operation_degrees_after
-    unfolding wire_is_linear_def
-    by simp
-qed
 lemma delete_operation_preserves_wire_is_linear:
   (* Deleting an operation preserves the linear structure of one valid wire.
 
@@ -6515,17 +4540,13 @@ lemma delete_operation_preserves_wire_is_linear:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   and
     valid_wire_after:
-      "qubit_in_circuit
-         (delete_operation circuit operation_node_id)
-         q"
+      "qubit_in_circuit (delete_operation circuit operation_node_id) q"
   shows
-    "wire_is_linear
-       (delete_operation circuit operation_node_id)
-       q"
+    "wire_is_linear (delete_operation circuit operation_node_id) q"
+  
   by (metis
       all_wires_linear_def
       delete_operation_preserves_linear_unused_wire
@@ -6536,6 +4557,7 @@ lemma delete_operation_preserves_wire_is_linear:
       qubit_in_circuit_def
       valid_circuit
       valid_wire_after)
+
 lemma delete_operation_preserves_wire_linearity:
   (* Deleting an operation preserves linearity of every circuit wire.
 
@@ -6554,35 +4576,14 @@ lemma delete_operation_preserves_wire_linearity:
       "is_valid_circuit circuit"
   and
     operation_exists:
-      "nodes circuit operation_node_id =
-         Some (OperationNode op)"
+      "nodes circuit operation_node_id = Some (OperationNode op)"
   shows
-    "all_wires_linear
-       (delete_operation circuit operation_node_id)"
+    "all_wires_linear (delete_operation circuit operation_node_id)"
 
-proof -
-  show ?thesis
-    unfolding all_wires_linear_def
-
-  proof (intro allI impI)
-
-    fix q
-
-    assume valid_wire_after:
-      "qubit_in_circuit
-         (delete_operation circuit operation_node_id)
-         q"
-
-    show
-      "wire_is_linear
-         (delete_operation circuit operation_node_id)
-         q"
-      using
-        valid_circuit
-        operation_exists
-        valid_wire_after
-      by (rule delete_operation_preserves_wire_is_linear)
-  qed
-qed
-
+  unfolding all_wires_linear_def
+  using
+    delete_operation_preserves_wire_is_linear
+    operation_exists
+    valid_circuit
+  by simp
 end
